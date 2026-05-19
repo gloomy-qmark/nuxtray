@@ -872,9 +872,7 @@ class VpnProvider extends ChangeNotifier {
     if (_pingInProgress || _selectedServer == null) return;
     _pingInProgress = true;
     try {
-      final ping = await flutterV2ray
-          .getServerDelay(config: _selectedServer!.config)
-          .timeout(const Duration(seconds: 2));
+      final ping = await _measureLatency(_selectedServer!);
       if (_selectedServer != null) {
         final index = _servers.indexWhere(
           (s) => s.config == _selectedServer!.config && s.name == _selectedServer!.name,
@@ -942,9 +940,7 @@ class VpnProvider extends ChangeNotifier {
       _pingingServers.add(key);
       notifyListeners();
       try {
-        final ping = await flutterV2ray
-            .getServerDelay(config: s.config)
-            .timeout(const Duration(seconds: 4));
+        final ping = await _measureLatency(s);
         return (server: s, ping: ping);
       } catch (_) {
         return (server: s, ping: -1);
@@ -1028,14 +1024,64 @@ class VpnProvider extends ChangeNotifier {
 
   String _serverKey(ServerInfo server) => '${server.config}::${server.name}';
 
+  String _extractHost(String config) {
+    try {
+      final uri = Uri.parse(config);
+      if (uri.host.isNotEmpty && !uri.host.contains('.')) {
+        // Might be IP:port or similar, try different parsing
+      }
+      if (uri.host.isNotEmpty) return uri.host;
+    } catch (_) {}
+    try {
+      final parsed = json.decode(config);
+      if (parsed is Map) {
+        final ob = (parsed['outbounds'] as List?)?.firstOrNull;
+        if (ob is Map) {
+          final s = (ob['settings'] as Map?) ?? {};
+          final vnext = (s['vnext'] as List?)?.firstOrNull;
+          if (vnext is Map && vnext['address'] != null) return vnext['address'].toString();
+          final servers = (s['servers'] as List?)?.firstOrNull;
+          if (servers is Map && servers['address'] != null) return servers['address'].toString();
+        }
+      }
+    } catch (_) {}
+    if (config.startsWith('vmess://')) {
+      try {
+        final decoded = utf8.decode(base64.decode(config.substring(8)));
+        final vmess = json.decode(decoded);
+        if (vmess['add'] != null) return vmess['add'].toString();
+      } catch (_) {}
+    }
+    return '';
+  }
+
+  Future<int> _measureLatency(ServerInfo server) async {
+    final host = _extractHost(server.config);
+    if (host.isNotEmpty) {
+      try {
+        final result = await Process.run('ping', ['-c', '1', '-W', '4', host]);
+        if (result.exitCode == 0) {
+          final match = RegExp(r'time[=:]\s*([\d.]+)\s*ms').firstMatch(result.stdout.toString());
+          if (match != null) return double.parse(match.group(1)!).round();
+        }
+      } catch (_) {}
+    }
+    // Fallback to V2Ray TCP ping
+    try {
+      return await flutterV2ray
+          .getServerDelay(config: server.config)
+          .timeout(const Duration(seconds: 5));
+    } catch (_) {
+      return -1;
+    }
+  }
+
   Future<void> checkServerPing(ServerInfo server) async {
     final key = _serverKey(server);
     _pingingServers.add(key);
     notifyListeners();
     try {
-      final ping = await flutterV2ray
-          .getServerDelay(config: server.config)
-          .timeout(const Duration(seconds: 5));
+      final ping = await _measureLatency(server);
       final index = _servers.indexWhere(
         (s) => s.config == server.config && s.name == server.name,
       );
