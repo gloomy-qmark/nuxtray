@@ -446,7 +446,14 @@ class VpnProvider extends ChangeNotifier {
     try {
       if (trimmed.startsWith('http')) {
         final uri = Uri.parse(trimmed);
-        final groupName = uri.host + uri.path;
+        final host = uri.host;
+
+        // Reuse existing name for this URL or generate a new one
+        final existingName = _groupSources.entries
+            .where((e) => e.value == trimmed)
+            .map((e) => e.key)
+            .firstOrNull;
+        final groupName = existingName ?? _nextGroupName(host);
 
         // Fetch from URL with custom headers
         final response = await http.get(
@@ -998,8 +1005,19 @@ class VpnProvider extends ChangeNotifier {
     super.dispose();
   }
 
-  final Map<String, String> _groupSources = {};
+  final Map<String, String> _groupSources = {}; // displayName → fullUrl
   Map<String, String> get groupSources => _groupSources;
+
+  String _nextGroupName(String host) {
+    if (!_groupSources.keys.any((k) => k == host || k.startsWith('$host ('))) {
+      return host;
+    }
+    int i = 2;
+    while (_groupSources.containsKey('$host ($i)')) {
+      i++;
+    }
+    return '$host ($i)';
+  }
 
   final Set<String> _pingingServers = {};
   Set<String> get pingingServers => _pingingServers;
