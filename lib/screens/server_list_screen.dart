@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:nuxtray/screens/in_app_push.dart';
 import 'package:nuxtray/vpn_provider.dart';
 import 'package:provider/provider.dart';
 
@@ -265,11 +266,24 @@ class _AnimatedServerGroupState extends State<_AnimatedServerGroup>
                           ),
                           color: cs.surfaceContainerHigh,
                           elevation: 2,
-                          onSelected: (action) {
+                          onSelected: (action) async {
                             switch (action) {
                               case _GroupAction.sync:
                                 HapticFeedback.mediumImpact();
-                                vpn.syncGroup(widget.name);
+                                final result = await vpn.syncGroup(widget.name);
+                                if (context.mounted) {
+                                  if (result.ok) {
+                                    InAppPush.show(context,
+                                      message: '${widget.name}: ${result.count} серверов обновлено',
+                                      type: PushType.success,
+                                    );
+                                  } else {
+                                    InAppPush.show(context,
+                                      message: 'Ошибка синхронизации ${widget.name}',
+                                      type: PushType.error,
+                                    );
+                                  }
+                                }
                               case _GroupAction.ping:
                                 HapticFeedback.mediumImpact();
                                 vpn.checkGroupPing(widget.name);

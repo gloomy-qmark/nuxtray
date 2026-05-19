@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:nuxtray/vpn_provider.dart';
 import 'package:nuxtray/screens/settings_screen.dart';
 import 'package:nuxtray/screens/page_transition.dart';
+import 'package:nuxtray/screens/in_app_push.dart';
 import 'package:nuxtray/screens/shrimp_ad.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -111,14 +112,14 @@ class _HomeScreenState extends State<HomeScreen>
               final input = controller.text.trim();
               if (input.isNotEmpty) {
                 final success = await vpn.addSubscription(input);
-                if (success) {
-                  if (context.mounted) Navigator.pop(context);
-                } else {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Ошибка при добавлении подписки. Проверьте ссылку.')),
-                    );
-                  }
+                if (context.mounted) {
+                  InAppPush.show(context,
+                    message: success
+                        ? 'Подписка добавлена'
+                        : 'Ошибка. Проверьте ссылку.',
+                    type: success ? PushType.success : PushType.error,
+                  );
+                  if (success) Navigator.pop(context);
                 }
               }
             },

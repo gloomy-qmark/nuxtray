@@ -937,14 +937,18 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> syncGroup(String groupName) async {
+  Future<({bool ok, int count})> syncGroup(String groupName) async {
     final url = _groupSources[groupName];
     if (url != null) {
-      // Remove old servers of this group
       _servers.removeWhere((s) => s.group == groupName);
-      await addSubscription(url);
+      if (_selectedServer?.group == groupName) {
+        _selectedServer = null;
+      }
+      final ok = await addSubscription(url);
       notifyListeners();
+      return (ok: ok, count: _servers.where((s) => s.group == groupName).length);
     }
+    return (ok: false, count: 0);
   }
 
   void selectServer(ServerInfo server) {
