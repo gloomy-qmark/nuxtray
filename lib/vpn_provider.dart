@@ -30,6 +30,10 @@ class VpnSettings {
   String geositeUrl;
   int geoipUpdatedAt;
   int geositeUpdatedAt;
+  bool observatoryEnabled;
+  String observatoryGroup;
+  int observatoryInterval;
+  bool observatoryAutoSwitch;
 
   VpnSettings({
     this.socksPort = 10808,
@@ -49,6 +53,10 @@ class VpnSettings {
     this.geositeUrl = '',
     this.geoipUpdatedAt = 0,
     this.geositeUpdatedAt = 0,
+    this.observatoryEnabled = false,
+    this.observatoryGroup = '',
+    this.observatoryInterval = 60,
+    this.observatoryAutoSwitch = true,
   });
 
   Map<String, dynamic> toJson() => {
@@ -69,6 +77,10 @@ class VpnSettings {
     'geositeUrl': geositeUrl,
     'geoipUpdatedAt': geoipUpdatedAt,
     'geositeUpdatedAt': geositeUpdatedAt,
+    'observatoryEnabled': observatoryEnabled,
+    'observatoryGroup': observatoryGroup,
+    'observatoryInterval': observatoryInterval,
+    'observatoryAutoSwitch': observatoryAutoSwitch,
   };
 
   VpnSettings copyWith({
@@ -89,6 +101,10 @@ class VpnSettings {
     String? geositeUrl,
     int? geoipUpdatedAt,
     int? geositeUpdatedAt,
+    bool? observatoryEnabled,
+    String? observatoryGroup,
+    int? observatoryInterval,
+    bool? observatoryAutoSwitch,
   }) => VpnSettings(
     socksPort: socksPort ?? this.socksPort,
     httpPort: httpPort ?? this.httpPort,
@@ -107,6 +123,10 @@ class VpnSettings {
     geositeUrl: geositeUrl ?? this.geositeUrl,
     geoipUpdatedAt: geoipUpdatedAt ?? this.geoipUpdatedAt,
     geositeUpdatedAt: geositeUpdatedAt ?? this.geositeUpdatedAt,
+    observatoryEnabled: observatoryEnabled ?? this.observatoryEnabled,
+    observatoryGroup: observatoryGroup ?? this.observatoryGroup,
+    observatoryInterval: observatoryInterval ?? this.observatoryInterval,
+    observatoryAutoSwitch: observatoryAutoSwitch ?? this.observatoryAutoSwitch,
   );
 
   factory VpnSettings.fromJson(Map<String, dynamic> json) => VpnSettings(
@@ -127,6 +147,10 @@ class VpnSettings {
     geositeUrl: json['geositeUrl'] ?? '',
     geoipUpdatedAt: json['geoipUpdatedAt'] ?? 0,
     geositeUpdatedAt: json['geositeUpdatedAt'] ?? 0,
+    observatoryEnabled: json['observatoryEnabled'] ?? false,
+    observatoryGroup: json['observatoryGroup'] ?? '',
+    observatoryInterval: json['observatoryInterval'] ?? 60,
+    observatoryAutoSwitch: json['observatoryAutoSwitch'] ?? true,
   );
 }
 
@@ -355,8 +379,13 @@ class VpnProvider extends ChangeNotifier {
   VpnSettings get settings => _settings;
 
   void updateSettings(VpnSettings newSettings) {
+    final obsChanged =
+        _settings.observatoryEnabled != newSettings.observatoryEnabled ||
+        _settings.observatoryGroup != newSettings.observatoryGroup ||
+        _settings.observatoryInterval != newSettings.observatoryInterval;
     _settings = newSettings;
-    _saveServers(); // We save settings in the same file or separate
+    _saveServers();
+    if (obsChanged) _restartObservatory();
     notifyListeners();
   }
 
@@ -601,6 +630,7 @@ class VpnProvider extends ChangeNotifier {
           _selectedServer = _servers.first;
         }
         notifyListeners();
+        _restartObservatory();
       }
     } catch (e) {
       debugPrint('Error loading servers: $e');
@@ -861,6 +891,93 @@ class VpnProvider extends ChangeNotifier {
     _duration = Duration.zero;
   }
 
+  Timer? _observatoryTimer;
+
+  List<String> get observatoryGroupNames =>
+      _servers.map((s) => s.group).toSet().toList()..sort();
+
+  void _restartObservatory() {
+    _stopObservatory();
+    if (!_settings.observatoryEnabled) return;
+    if (_settings.observatoryGroup.isEmpty) return;
+    final groupServers =
+        _servers.where((s) => s.group == _settings.observatoryGroup).toList();
+    if (groupServers.isEmpty) return;
+
+    _observatoryTimer = Timer.periodic(
+      Duration(seconds: _settings.observatoryInterval),
+      (_) => _runObservatory(),
+    );
+    // Run immediately
+    _runObservatory();
+  }
+
+  void _stopObservatory() {
+    _observatoryTimer?.cancel();
+    _observatoryTimer = null;
+  }
+
+  Future<void> _runObservatory() async {
+    final group = _settings.observatoryGroup;
+    if (group.isEmpty) return;
+    final servers = _servers.where((s) => s.group == group).toList();
+    if (servers.length < 2) return;
+
+    // Ping all servers in the group in parallel
+    final results = await Future.wait(servers.map((s) async {
+      final key = _serverKey(s);
+      _pingingServers.add(key);
+      notifyListeners();
+      try {
+        final ping = await flutterV2ray
+            .getServerDelay(config: s.config)
+            .timeout(const Duration(seconds: 4));
+        return (server: s, ping: ping);
+      } catch (_) {
+        return (server: s, ping: -1);
+      }
+    }));
+
+    // Update pings
+    for (final result in results) {
+      final idx = _servers.indexWhere(
+        (s) => s.config == result.server.config,
+      );
+      if (idx != -1) {
+        _servers[idx] = ServerInfo(
+          name: result.server.name,
+          country: result.server.country,
+          protocol: result.server.protocol,
+          ping: result.ping,
+          group: result.server.group,
+          config: result.server.config,
+        );
+      }
+      _pingingServers.remove(_serverKey(result.server));
+    }
+
+    // Auto-switch to best ping
+    if (_settings.observatoryAutoSwitch && _status == VpnStatus.connected) {
+      final best = results
+          .where((r) => r.ping > 0)
+          .reduce((a, b) => a.ping < b.ping ? a : b);
+      if (best.ping > 0 && best.server.config != _selectedServer?.config) {
+        debugPrint(
+            'Observatory: switching to ${best.server.name} (${best.ping}ms)');
+        _selectedServer = best.server;
+        _saveServers();
+        notifyListeners();
+        // Reconnect to new server
+        toggleConnection(); // disconnect
+        toggleConnection(); // connect
+        return;
+      }
+    }
+
+    _saveServers();
+    notifyListeners();
+  }
+
   String _formatSpeed(int bytes) {
     if (bytes <= 0) return "0 B/s";
     const units = ["B/s", "KB/s", "MB/s", "GB/s"];
@@ -871,6 +988,7 @@ class VpnProvider extends ChangeNotifier {
   @override
   void dispose() {
     _connectionTimer?.cancel();
+    _stopObservatory();
     super.dispose();
   }
 

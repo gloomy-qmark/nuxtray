@@ -106,6 +106,102 @@ class SettingsScreen extends StatelessWidget {
               onChanged: (val) => vpn.updateSettings(s.copyWith(autoStart: val)),
             ),
           ),
+          const _DividerWithPadding(),
+          _SectionHeader(title: 'Экспериментальное'),
+          _SettingTile(
+            icon: Icons.track_changes,
+            title: 'Обсерватория',
+            subtitle: s.observatoryEnabled
+                ? 'Активна · ${s.observatoryGroup} · каждые ${s.observatoryInterval}с'
+                : 'Автоматический выбор лучшего сервера',
+            trailing: Switch(
+              value: s.observatoryEnabled,
+              onChanged: (val) => vpn.updateSettings(s.copyWith(observatoryEnabled: val)),
+            ),
+          ),
+          if (s.observatoryEnabled) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Card(
+                elevation: 0,
+                color: cs.surfaceContainerLow,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Группа для мониторинга',
+                          style: Theme.of(context).textTheme.labelMedium),
+                      const SizedBox(height: 8),
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('obs_group_${s.observatoryGroup}'),
+                        initialValue: s.observatoryGroup.isNotEmpty &&
+                                vpn.observatoryGroupNames.contains(s.observatoryGroup)
+                            ? s.observatoryGroup
+                            : null,
+                        items: vpn.observatoryGroupNames.map((g) =>
+                            DropdownMenuItem(value: g, child: Text(g))).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            vpn.updateSettings(s.copyWith(observatoryGroup: val));
+                          }
+                        },
+                        decoration: InputDecoration(
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Интервал: ${s.observatoryInterval}с',
+                                    style: Theme.of(context).textTheme.labelMedium),
+                                const SizedBox(height: 4),
+                                Text('Проверка пинга каждые ${s.observatoryInterval} секунд',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: cs.onSurfaceVariant,
+                                    )),
+                              ],
+                            ),
+                          ),
+                          SizedBox(
+                            width: 160,
+                            child: Slider(
+                              value: s.observatoryInterval.toDouble(),
+                              min: 10,
+                              max: 600,
+                              divisions: 59,
+                              label: '${s.observatoryInterval}с',
+                              onChanged: (val) => vpn.updateSettings(
+                                s.copyWith(observatoryInterval: val.round()),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      CheckboxListTile(
+                        title: const Text('Автопереключение'),
+                        subtitle: const Text('Автоматически переключаться на сервер с лучшим пингом'),
+                        value: s.observatoryAutoSwitch,
+                        onChanged: (val) => vpn.updateSettings(
+                          s.copyWith(observatoryAutoSwitch: val ?? true),
+                        ),
+                        contentPadding: EdgeInsets.zero,
+                        controlAffinity: ListTileControlAffinity.trailing,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           const SizedBox(height: 40),
         ],
       ),
