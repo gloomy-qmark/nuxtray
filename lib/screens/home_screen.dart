@@ -234,50 +234,50 @@ class _HomeScreenState extends State<HomeScreen>
           builder: (context, value, child) {
             return Opacity(opacity: value, child: child);
           },
-          child: Card(
-            color: cs.surfaceContainerHigh.withValues(alpha: 0.7),
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _AnimatedStatItem(
-                    icon: Icons.arrow_downward_rounded,
-                    value: vpn.downSpeed,
-                    label: 'ВХОД',
-                    color: isConnected ? cs.primary : cs.onSurfaceVariant,
-                  ),
-                  Container(
-                    height: 32,
-                    width: 1,
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    color: cs.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                  _AnimatedStatItem(
-                    icon: Icons.arrow_upward_rounded,
-                    value: vpn.upSpeed,
-                    label: 'ИСХОД',
-                    color: isConnected ? cs.primary : cs.onSurfaceVariant,
-                  ),
-                  Container(
-                    height: 32,
-                    width: 1,
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    color: cs.outlineVariant.withValues(alpha: 0.5),
-                  ),
-                  _AnimatedStatItem(
-                    icon: Icons.speed_rounded,
-                    value: vpn.selectedServer!.ping == 0
-                        ? '—'
-                        : '${vpn.selectedServer!.ping} ms',
-                    label: 'ПИНГ',
-                    color: isConnected ? cs.primary : cs.onSurfaceVariant,
-                  ),
-                ],
-              ),
-            ),
-          ),
+          // child: Card(
+          //   color: cs.surfaceContainerHigh.withValues(alpha: 0.7),
+          //   margin: EdgeInsets.zero,
+          //   child: Padding(
+          //     padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
+          //     child: Row(
+          //       mainAxisAlignment: MainAxisAlignment.center,
+          //       children: [
+          //         _AnimatedStatItem(
+          //           icon: Icons.arrow_downward_rounded,
+          //           value: vpn.downSpeed,
+          //           label: 'ВХОД',
+          //           color: isConnected ? cs.primary : cs.onSurfaceVariant,
+          //         ),
+          //         Container(
+          //           height: 32,
+          //           width: 1,
+          //           margin: const EdgeInsets.symmetric(horizontal: 12),
+          //           color: cs.outlineVariant.withValues(alpha: 0.5),
+          //         ),
+          //         _AnimatedStatItem(
+          //           icon: Icons.arrow_upward_rounded,
+          //           value: vpn.upSpeed,
+          //           label: 'ИСХОД',
+          //           color: isConnected ? cs.primary : cs.onSurfaceVariant,
+          //         ),
+          //         Container(
+          //           height: 32,
+          //           width: 1,
+          //           margin: const EdgeInsets.symmetric(horizontal: 12),
+          //           color: cs.outlineVariant.withValues(alpha: 0.5),
+          //         ),
+          //         _AnimatedStatItem(
+          //           icon: Icons.speed_rounded,
+          //           value: vpn.selectedServer!.ping == 0
+          //               ? '—'
+          //               : '${vpn.selectedServer!.ping} ms',
+          //           label: 'ПИНГ',
+          //           color: isConnected ? cs.primary : cs.onSurfaceVariant,
+          //         ),
+          //       ],
+          //     ),
+          //   ),
+          // ),
         ),
       ],
     );
@@ -413,9 +413,10 @@ class _AnimatedConnectionCircle extends StatelessWidget {
                             const SizedBox(height: 8),
                             Text(
                               _formatDuration(vpn.connectionDuration),
-                              style: theme.textTheme.headlineSmall?.copyWith(
+                              style: (theme.textTheme.headlineSmall ?? const TextStyle()).copyWith(
                                 color: cs.onPrimary,
                                 fontWeight: FontWeight.bold,
+                                fontSize: 18, // Поставил читаемый размер вместо 4
                               ),
                             ),
                           ],

@@ -81,20 +81,7 @@ class _SplitTunnelingScreenState extends State<SplitTunnelingScreen> {
               onSelectionChanged: (selection) {
                 final val = selection.first;
                 setState(() => _mode = val);
-                final s = vpn.settings;
-                vpn.updateSettings(VpnSettings(
-                  socksPort: s.socksPort,
-                  httpPort: s.httpPort,
-                  bypassLan: s.bypassLan,
-                  themeMode: s.themeMode,
-                  language: s.language,
-                  allowedApps: s.allowedApps,
-                  excludedApps: s.excludedApps,
-                  proxyDomains: s.proxyDomains,
-                  directDomains: s.directDomains,
-                  splitMode: _mode,
-                  adDisabled: s.adDisabled,
-                ));
+                vpn.updateSettings(vpn.settings.copyWith(splitMode: val));
               },
               multiSelectionEnabled: false,
               showSelectedIcon: false,
@@ -205,40 +192,15 @@ class _SplitTunnelingScreenState extends State<SplitTunnelingScreen> {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _searching ? null : () {
           setState(() => _searching = true);
-          final s = vpn.settings;
           final selected = _selectedApps.entries
               .where((e) => e.value)
               .map((e) => e.key)
               .toList();
 
           if (_mode == 'direct') {
-            vpn.updateSettings(VpnSettings(
-              socksPort: s.socksPort,
-              httpPort: s.httpPort,
-              bypassLan: s.bypassLan,
-              themeMode: s.themeMode,
-              language: s.language,
-              allowedApps: s.allowedApps,
-              excludedApps: selected,
-              proxyDomains: s.proxyDomains,
-              directDomains: s.directDomains,
-              splitMode: s.splitMode,
-              adDisabled: s.adDisabled,
-            ));
+            vpn.updateSettings(vpn.settings.copyWith(excludedApps: selected));
           } else {
-            vpn.updateSettings(VpnSettings(
-              socksPort: s.socksPort,
-              httpPort: s.httpPort,
-              bypassLan: s.bypassLan,
-              themeMode: s.themeMode,
-              language: s.language,
-              allowedApps: selected,
-              excludedApps: s.excludedApps,
-              proxyDomains: s.proxyDomains,
-              directDomains: s.directDomains,
-              splitMode: s.splitMode,
-              adDisabled: s.adDisabled,
-            ));
+            vpn.updateSettings(vpn.settings.copyWith(allowedApps: selected));
           }
 
           if (context.mounted) Navigator.pop(context);

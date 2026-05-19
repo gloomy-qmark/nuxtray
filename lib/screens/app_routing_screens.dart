@@ -56,18 +56,9 @@ class _DomainRoutingScreenState extends State<DomainRoutingScreen> {
     final newList = List<String>.from(isProxy ? settings.proxyDomains : settings.directDomains);
     if (!newList.contains(domain)) {
       newList.add(domain);
-      vpn.updateSettings(VpnSettings(
-        socksPort: settings.socksPort,
-        httpPort: settings.httpPort,
-        bypassLan: settings.bypassLan,
-        themeMode: settings.themeMode,
-        language: settings.language,
-        allowedApps: settings.allowedApps,
-        excludedApps: settings.excludedApps,
+      vpn.updateSettings(settings.copyWith(
         proxyDomains: isProxy ? newList : settings.proxyDomains,
         directDomains: isProxy ? settings.directDomains : newList,
-        splitMode: settings.splitMode,
-        adDisabled: settings.adDisabled,
       ));
     }
   }
@@ -75,17 +66,9 @@ class _DomainRoutingScreenState extends State<DomainRoutingScreen> {
   void _removeDomain(VpnProvider vpn, VpnSettings settings, String domain, bool isProxy) {
     final newList = List<String>.from(isProxy ? settings.proxyDomains : settings.directDomains);
     newList.remove(domain);
-    vpn.updateSettings(VpnSettings(
-      socksPort: settings.socksPort,
-      httpPort: settings.httpPort,
-      bypassLan: settings.bypassLan,
-      themeMode: settings.themeMode,
-      language: settings.language,
-      allowedApps: settings.allowedApps,
-      excludedApps: settings.excludedApps,
+    vpn.updateSettings(settings.copyWith(
       proxyDomains: isProxy ? newList : settings.proxyDomains,
       directDomains: isProxy ? settings.directDomains : newList,
-      splitMode: settings.splitMode,
     ));
   }
 }

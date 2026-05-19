@@ -58,11 +58,11 @@ class _ServerListScreenState extends State<ServerListScreen> {
         child: CustomScrollView(
           physics: const ClampingScrollPhysics(),
           slivers: [
-            // SliverAppBar(
-            //   title: const Text('Список серверов'),
-            //   centerTitle: true,
-            //   pinned: true,
-            // ),
+            SliverAppBar(
+              title: const Text('Список серверов'),
+              centerTitle: true,
+              pinned: true,
+            ),
             if (vpn.servers.isEmpty)
               SliverFillRemaining(
                 hasScrollBody: true,

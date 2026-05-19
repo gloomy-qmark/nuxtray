@@ -1,5 +1,5 @@
 name: nuxtray
-description: "A new Flutter project."
+description: "Flutter VPN client using V2Ray/Xray protocol with Material 3 design."
 publish_to: 'none'
 
 version: 1.0.0+1

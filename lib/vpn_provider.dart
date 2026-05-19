@@ -22,8 +22,10 @@ class VpnSettings {
   List<String> excludedApps;
   List<String> proxyDomains;
   List<String> directDomains;
-  String splitMode; // 'direct' (selected apps bypass VPN) or 'route' (selected apps go through VPN)
+  String splitMode;
   bool adDisabled;
+  bool killSwitch;
+  bool autoStart;
 
   VpnSettings({
     this.socksPort = 10808,
@@ -37,6 +39,8 @@ class VpnSettings {
     this.directDomains = const [],
     this.splitMode = 'direct',
     this.adDisabled = false,
+    this.killSwitch = false,
+    this.autoStart = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -51,7 +55,39 @@ class VpnSettings {
     'directDomains': directDomains,
     'splitMode': splitMode,
     'adDisabled': adDisabled,
+    'killSwitch': killSwitch,
+    'autoStart': autoStart,
   };
+
+  VpnSettings copyWith({
+    int? socksPort,
+    int? httpPort,
+    bool? bypassLan,
+    String? themeMode,
+    String? language,
+    List<String>? allowedApps,
+    List<String>? excludedApps,
+    List<String>? proxyDomains,
+    List<String>? directDomains,
+    String? splitMode,
+    bool? adDisabled,
+    bool? killSwitch,
+    bool? autoStart,
+  }) => VpnSettings(
+    socksPort: socksPort ?? this.socksPort,
+    httpPort: httpPort ?? this.httpPort,
+    bypassLan: bypassLan ?? this.bypassLan,
+    themeMode: themeMode ?? this.themeMode,
+    language: language ?? this.language,
+    allowedApps: allowedApps ?? this.allowedApps,
+    excludedApps: excludedApps ?? this.excludedApps,
+    proxyDomains: proxyDomains ?? this.proxyDomains,
+    directDomains: directDomains ?? this.directDomains,
+    splitMode: splitMode ?? this.splitMode,
+    adDisabled: adDisabled ?? this.adDisabled,
+    killSwitch: killSwitch ?? this.killSwitch ?? false,
+    autoStart: autoStart ?? this.autoStart ?? false,
+  );
 
   factory VpnSettings.fromJson(Map<String, dynamic> json) => VpnSettings(
     socksPort: json['socksPort'] ?? 10808,
@@ -65,6 +101,8 @@ class VpnSettings {
     directDomains: List<String>.from(json['directDomains'] ?? []),
     splitMode: json['splitMode'] ?? 'direct',
     adDisabled: json['adDisabled'] ?? false,
+    killSwitch: json['killSwitch'] ?? false,
+    autoStart: json['autoStart'] ?? false,
   );
 }
 
@@ -267,71 +305,7 @@ class VpnProvider extends ChangeNotifier {
   String _osVersion = "Unknown";
   String _locale = "en-US";
 
-  final List<ServerInfo> _servers = [
-    // ServerInfo(
-    //   name: 'Европа ⭐️ [авто-выбор]',
-    //   country: 'Europe',
-    //   protocol: 'VLESS',
-    //   ping: 32,
-    //   group: '🍤 I.Shrimp'
-    // ),
-    // ServerInfo(
-    //   name: 'Финляндия [быстрая]',
-    //   country: 'Finland',
-    //   protocol: 'Hysteria2',
-    //   ping: 28,
-    //   group: '🍤 I.Shrimp'
-    // ),
-    // ServerInfo(
-    //   name: 'Нидерланды [быстрая]',
-    //   country: 'Netherlands',
-    //   protocol: 'VLESS',
-    //   ping: 42,
-    //   group: '🍤 I.Shrimp'
-    // ),
-    // ServerInfo(
-    //   name: 'Россия [без блок.]',
-    //   country: 'Russia',
-    //   protocol: 'VLESS',
-    //   ping: 15,
-    //   group: '🍤 I.Shrimp'
-    // ),
-    // ServerInfo(
-    //   name: 'Германия',
-    //   country: 'Germany',
-    //   protocol: 'VLESS',
-    //   ping: 48,
-    //   group: '🍤 I.Shrimp'
-    // ),
-    // ServerInfo(
-    //   name: 'США',
-    //   country: 'USA',
-    //   protocol: 'VLESS',
-    //   ping: 120,
-    //   group: '🍤 I.Shrimp'
-    // ),
-    // ServerInfo(
-    //   name: 'Япония',
-    //   country: 'Japan',
-    //   protocol: 'VLESS',
-    //   ping: 210,
-    //   group: '🍤 I.Shrimp'
-    // ),
-    // ServerInfo(
-    //   name: 'Аргентина',
-    //   country: 'Argentina',
-    //   protocol: 'VLESS',
-    //   ping: 245,
-    //   group: '🍤 I.Shrimp'
-    // ),
-    // ServerInfo(
-    //   name: 'Турция',
-    //   country: 'Turkey',
-    //   protocol: 'VLESS',
-    //   ping: 65,
-    //   group: '🍤 I.Shrimp'
-    // ),
-  ];
+  final List<ServerInfo> _servers = [];
 
   List<ServerInfo> get servers => _servers;
 
@@ -546,9 +520,18 @@ class VpnProvider extends ChangeNotifier {
   }
 
   VpnProvider() {
-    _loadServers();
+    _loadServers().then((_) => _autoConnect());
     _generateHwid();
     _initV2ray();
+  }
+
+  Future<void> _autoConnect() async {
+    if (_settings.autoStart && _selectedServer != null) {
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (_status == VpnStatus.disconnected && _selectedServer != null) {
+        toggleConnection();
+      }
+    }
   }
 
   Future<void> _saveServers() async {
@@ -671,14 +654,14 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
 
       try {
-        // Prepare routing rules if using a full config
-        // For simplicity with flutter_v2ray_plus, we use startVless 
-        // but we should check if it supports app filtering.
-        // Most forks support passing bypass/allow apps via a separate method or in start parameters.
-        
+        String config = _selectedServer!.config;
+        if (_settings.killSwitch) {
+          config = _injectKillSwitch(config);
+        }
+
         await flutterV2ray.startVless(
           remark: _selectedServer!.name,
-          config: _selectedServer!.config,
+          config: config,
         );
       } catch (e) {
         debugPrint('Error starting VPN: $e');
@@ -691,6 +674,26 @@ class VpnProvider extends ChangeNotifier {
       _stopTimer();
       notifyListeners();
     }
+  }
+
+  String _injectKillSwitch(String rawConfig) {
+    try {
+      final parsed = json.decode(rawConfig);
+      if (parsed is Map<String, dynamic>) {
+        final outbounds = List<Map<String, dynamic>>.from(parsed['outbounds'] ?? []);
+        outbounds.add({'protocol': 'blackhole', 'tag': 'blocked'});
+        parsed['outbounds'] = outbounds;
+
+        final routing = Map<String, dynamic>.from(parsed['routing'] ?? {});
+        final rules = List<Map<String, dynamic>>.from(routing['rules'] ?? []);
+        rules.add({'type': 'field', 'ip': ['0.0.0.0/0', '::/0'], 'outboundTag': 'blocked'});
+        routing['rules'] = rules;
+        parsed['routing'] = routing;
+
+        return json.encode(parsed);
+      }
+    } catch (_) {}
+    return rawConfig;
   }
 
   bool _pingInProgress = false;
