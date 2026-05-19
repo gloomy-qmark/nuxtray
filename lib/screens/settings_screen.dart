@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../vpn_provider.dart';
 import 'app_routing_screens.dart';
 import 'split_tunneling_screen.dart';
+import 'page_transition.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -11,14 +12,15 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final vpn = context.watch<VpnProvider>();
     final settings = vpn.settings;
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text('Настройки'),
-        centerTitle: true,
       ),
       body: ListView(
         children: [
+          const SizedBox(height: 8),
           _SectionHeader(title: 'Подключение'),
           _SettingTile(
             icon: Icons.lan_outlined,
@@ -38,6 +40,7 @@ class SettingsScreen extends StatelessWidget {
                   proxyDomains: settings.proxyDomains,
                   directDomains: settings.directDomains,
                   splitMode: settings.splitMode,
+                  adDisabled: settings.adDisabled,
                 ));
               },
             ),
@@ -46,9 +49,89 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.numbers,
             title: 'SOCKS Порт',
             subtitle: settings.socksPort.toString(),
+            trailing: Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             onTap: () => _showPortDialog(context, 'SOCKS Port', settings.socksPort, (val) {
-               vpn.updateSettings(VpnSettings(
-                  socksPort: val,
+              vpn.updateSettings(VpnSettings(
+                socksPort: val,
+                httpPort: settings.httpPort,
+                bypassLan: settings.bypassLan,
+                themeMode: settings.themeMode,
+                language: settings.language,
+                allowedApps: settings.allowedApps,
+                excludedApps: settings.excludedApps,
+                proxyDomains: settings.proxyDomains,
+                directDomains: settings.directDomains,
+                  splitMode: settings.splitMode,
+                  adDisabled: settings.adDisabled,
+                ));
+              },
+            ),
+          ),
+          _SettingTile(
+            icon: Icons.http,
+            title: 'HTTP Порт',
+            subtitle: settings.httpPort.toString(),
+            trailing: Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+            onTap: () => _showPortDialog(context, 'HTTP Port', settings.httpPort, (val) {
+              vpn.updateSettings(VpnSettings(
+                socksPort: settings.socksPort,
+                httpPort: val,
+                bypassLan: settings.bypassLan,
+                themeMode: settings.themeMode,
+                language: settings.language,
+                allowedApps: settings.allowedApps,
+                excludedApps: settings.excludedApps,
+                proxyDomains: settings.proxyDomains,
+                directDomains: settings.directDomains,
+                  splitMode: settings.splitMode,
+                  adDisabled: settings.adDisabled,
+                ));
+              },
+            ),
+          ),
+          _SettingTile(
+            icon: Icons.apps,
+            title: 'Проксирование приложений',
+            subtitle: 'Выбрать приложения для работы через VPN',
+            trailing: Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+            onTap: () {
+              Navigator.push(context, smoothRoute(const SplitTunnelingScreen()));
+            },
+          ),
+          _SettingTile(
+            icon: Icons.domain,
+            title: 'Маршрутизация доменов',
+            subtitle: 'Настройка обхода или проксирования доменов',
+            trailing: Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+            onTap: () {
+              Navigator.push(context, smoothRoute(const DomainRoutingScreen()));
+            },
+          ),
+          const _DividerWithPadding(),
+          _SectionHeader(title: 'Приложение'),
+          _SettingTile(
+            icon: Icons.palette_outlined,
+            title: 'Тема оформления',
+            subtitle: _getThemeName(settings.themeMode),
+            trailing: Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+            onTap: () => _showThemeDialog(context, vpn),
+          ),
+          _SettingTile(
+            icon: Icons.language,
+            title: 'Язык',
+            subtitle: settings.language.toUpperCase(),
+            trailing: Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
+            onTap: () => _showLanguageDialog(context, vpn),
+          ),
+          _SettingTile(
+            icon: Icons.campaign_outlined,
+            title: 'Отключить рекламу',
+            subtitle: 'Показывать рекламу. Пожалуйста, не нажимайте данную галочку :(',
+            trailing: Switch(
+              value: settings.adDisabled,
+              onChanged: (val) {
+                vpn.updateSettings(VpnSettings(
+                  socksPort: settings.socksPort,
                   httpPort: settings.httpPort,
                   bypassLan: settings.bypassLan,
                   themeMode: settings.themeMode,
@@ -56,83 +139,32 @@ class SettingsScreen extends StatelessWidget {
                   allowedApps: settings.allowedApps,
                   excludedApps: settings.excludedApps,
                   proxyDomains: settings.proxyDomains,
-                directDomains: settings.directDomains,
-                splitMode: settings.splitMode,
+                  directDomains: settings.directDomains,
+                  splitMode: settings.splitMode,
+                  adDisabled: !val,
                 ));
-            }),
+              },
+            ),
           ),
-          _SettingTile(
-            icon: Icons.http,
-            title: 'HTTP Порт',
-            subtitle: settings.httpPort.toString(),
-            onTap: () => _showPortDialog(context, 'HTTP Port', settings.httpPort, (val) {
-               vpn.updateSettings(VpnSettings(
-                  socksPort: settings.socksPort,
-                  httpPort: val,
-                  bypassLan: settings.bypassLan,
-                  themeMode: settings.themeMode,
-                  language: settings.language,
-                  allowedApps: settings.allowedApps,
-                  excludedApps: settings.excludedApps,
-                  proxyDomains: settings.proxyDomains,
-                directDomains: settings.directDomains,
-                splitMode: settings.splitMode,
-                ));
-            }),
-          ),
-          _SettingTile(
-            icon: Icons.apps,
-            title: 'Проксирование приложений',
-            subtitle: 'Выбрать приложения для работы через VPN',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SplitTunnelingScreen()),
-              );
-            },
-          ),
-          _SettingTile(
-            icon: Icons.domain,
-            title: 'Маршрутизация доменов',
-            subtitle: 'Настройка обхода или проксирования доменов',
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const DomainRoutingScreen()),
-              );
-            },
-          ),
-          const Divider(),
-          _SectionHeader(title: 'Приложение'),
-          _SettingTile(
-            icon: Icons.palette_outlined,
-            title: 'Тема оформления',
-            subtitle: _getThemeName(settings.themeMode),
-            onTap: () => _showThemeDialog(context, vpn),
-          ),
-          _SettingTile(
-            icon: Icons.language,
-            title: 'Язык',
-            subtitle: settings.language.toUpperCase(),
-            onTap: () => _showLanguageDialog(context, vpn),
-          ),
-          const Divider(),
+          const _DividerWithPadding(),
           _SettingTile(
             icon: Icons.info_outline,
             title: 'О приложении',
             subtitle: 'Nuxtray v1.0.0-alpha',
+            trailing: Icon(Icons.chevron_right, color: cs.onSurfaceVariant),
             onTap: () {
               showAboutDialog(
                 context: context,
                 applicationName: 'Nuxtray',
                 applicationVersion: '1.0.0-alpha',
-                applicationIcon: const FlutterLogo(),
+                applicationIcon: Icon(Icons.vpn_lock_rounded, size: 48, color: cs.primary),
                 children: [
                   const Text('Продвинутый клиент для Xray/V2Ray на Flutter.'),
                 ],
               );
             },
           ),
+          const SizedBox(height: 40),
         ],
       ),
     );
@@ -159,7 +191,7 @@ class SettingsScreen extends StatelessWidget {
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Отмена')),
-          TextButton(onPressed: () {
+          FilledButton(onPressed: () {
             final val = int.tryParse(controller.text);
             if (val != null && val > 1024 && val < 65535) {
               onSave(val);
@@ -174,13 +206,16 @@ class SettingsScreen extends StatelessWidget {
   void _showThemeDialog(BuildContext context, VpnProvider vpn) {
     showDialog(
       context: context,
-      builder: (context) => SimpleDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Выберите тему'),
-        children: [
-          _ThemeOption(mode: 'system', label: 'Системная', vpn: vpn),
-          _ThemeOption(mode: 'light', label: 'Светлая', vpn: vpn),
-          _ThemeOption(mode: 'dark', label: 'Темная', vpn: vpn),
-        ],
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _ThemeOption(mode: 'system', label: 'Системная', icon: Icons.settings_suggest_outlined, vpn: vpn),
+            _ThemeOption(mode: 'light', label: 'Светлая', icon: Icons.light_mode_outlined, vpn: vpn),
+            _ThemeOption(mode: 'dark', label: 'Темная', icon: Icons.dark_mode_outlined, vpn: vpn),
+          ],
+        ),
       ),
     );
   }
@@ -188,12 +223,15 @@ class SettingsScreen extends StatelessWidget {
   void _showLanguageDialog(BuildContext context, VpnProvider vpn) {
     showDialog(
       context: context,
-      builder: (context) => SimpleDialog(
+      builder: (context) => AlertDialog(
         title: const Text('Выберите язык'),
-        children: [
-          _LangOption(code: 'ru', label: 'Русский', vpn: vpn),
-          _LangOption(code: 'en', label: 'English', vpn: vpn),
-        ],
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _LangOption(code: 'ru', label: 'Русский', icon: Icons.language, vpn: vpn),
+            _LangOption(code: 'en', label: 'English', icon: Icons.language, vpn: vpn),
+          ],
+        ),
       ),
     );
   }
@@ -205,16 +243,43 @@ class _SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-      child: Text(
-        title.toUpperCase(),
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-          color: Theme.of(context).colorScheme.primary,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-        ),
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+      child: Row(
+        children: [
+          Container(
+            width: 3,
+            height: 16,
+            decoration: BoxDecoration(
+              color: cs.primary,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            title.toUpperCase(),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: cs.primary,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+class _DividerWithPadding extends StatelessWidget {
+  const _DividerWithPadding();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      child: Divider(color: cs.outlineVariant.withValues(alpha: 0.5)),
     );
   }
 }
@@ -236,9 +301,18 @@ class _SettingTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return ListTile(
-      leading: Icon(icon, color: Theme.of(context).colorScheme.onSurfaceVariant),
-      title: Text(title),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: cs.secondaryContainer.withValues(alpha: 0.6),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: cs.onSecondaryContainer, size: 20),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: Text(subtitle),
       trailing: trailing,
       onTap: onTap,
@@ -249,31 +323,64 @@ class _SettingTile extends StatelessWidget {
 class _ThemeOption extends StatelessWidget {
   final String mode;
   final String label;
+  final IconData icon;
   final VpnProvider vpn;
-  const _ThemeOption({required this.mode, required this.label, required this.vpn});
+  const _ThemeOption({
+    required this.mode,
+    required this.label,
+    required this.icon,
+    required this.vpn,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SimpleDialogOption(
-      onPressed: () {
-        final s = vpn.settings;
-        vpn.updateSettings(VpnSettings(
-          socksPort: s.socksPort,
-          httpPort: s.httpPort,
-          bypassLan: s.bypassLan,
-          themeMode: mode,
-          language: s.language,
-          allowedApps: s.allowedApps,
-          excludedApps: s.excludedApps,
-          proxyDomains: s.proxyDomains,
-          directDomains: s.directDomains,
-          splitMode: s.splitMode,
-        ));
-        Navigator.pop(context);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(label),
+    final cs = Theme.of(context).colorScheme;
+    final isSelected = vpn.settings.themeMode == mode;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          final s = vpn.settings;
+          vpn.updateSettings(VpnSettings(
+            socksPort: s.socksPort,
+            httpPort: s.httpPort,
+            bypassLan: s.bypassLan,
+            themeMode: mode,
+            language: s.language,
+            allowedApps: s.allowedApps,
+            excludedApps: s.excludedApps,
+            proxyDomains: s.proxyDomains,
+            directDomains: s.directDomains,
+            splitMode: s.splitMode,
+            adDisabled: s.adDisabled,
+          ));
+          Navigator.pop(context);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected ? cs.secondaryContainer.withValues(alpha: 0.5) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: isSelected ? cs.onSecondaryContainer : cs.onSurfaceVariant),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color: isSelected ? cs.onSecondaryContainer : cs.onSurface,
+                  ),
+                ),
+              ),
+              if (isSelected)
+                Icon(Icons.check, color: cs.primary, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -282,31 +389,64 @@ class _ThemeOption extends StatelessWidget {
 class _LangOption extends StatelessWidget {
   final String code;
   final String label;
+  final IconData icon;
   final VpnProvider vpn;
-  const _LangOption({required this.code, required this.label, required this.vpn});
+  const _LangOption({
+    required this.code,
+    required this.label,
+    required this.icon,
+    required this.vpn,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SimpleDialogOption(
-      onPressed: () {
-        final s = vpn.settings;
-        vpn.updateSettings(VpnSettings(
-          socksPort: s.socksPort,
-          httpPort: s.httpPort,
-          bypassLan: s.bypassLan,
-          themeMode: s.themeMode,
-          language: code,
-          allowedApps: s.allowedApps,
-          excludedApps: s.excludedApps,
-          proxyDomains: s.proxyDomains,
-          directDomains: s.directDomains,
-          splitMode: s.splitMode,
-        ));
-        Navigator.pop(context);
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        child: Text(label),
+    final cs = Theme.of(context).colorScheme;
+    final isSelected = vpn.settings.language == code;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          final s = vpn.settings;
+          vpn.updateSettings(VpnSettings(
+            socksPort: s.socksPort,
+            httpPort: s.httpPort,
+            bypassLan: s.bypassLan,
+            themeMode: s.themeMode,
+            language: code,
+            allowedApps: s.allowedApps,
+            excludedApps: s.excludedApps,
+            proxyDomains: s.proxyDomains,
+            directDomains: s.directDomains,
+            splitMode: s.splitMode,
+            adDisabled: s.adDisabled,
+          ));
+          Navigator.pop(context);
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            color: isSelected ? cs.secondaryContainer.withValues(alpha: 0.5) : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 22, color: isSelected ? cs.onSecondaryContainer : cs.onSurfaceVariant),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                    color: isSelected ? cs.onSecondaryContainer : cs.onSurface,
+                  ),
+                ),
+              ),
+              if (isSelected)
+                Icon(Icons.check, color: cs.primary, size: 20),
+            ],
+          ),
+        ),
       ),
     );
   }

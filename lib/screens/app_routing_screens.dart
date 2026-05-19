@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../vpn_provider.dart';
 
-
-
 class DomainRoutingScreen extends StatefulWidget {
   const DomainRoutingScreen({super.key});
 
@@ -12,8 +10,6 @@ class DomainRoutingScreen extends StatefulWidget {
 }
 
 class _DomainRoutingScreenState extends State<DomainRoutingScreen> {
-  // Domain input controller not needed at state level; created locally where required.
-
   @override
   Widget build(BuildContext context) {
     final vpn = context.watch<VpnProvider>();
@@ -24,8 +20,8 @@ class _DomainRoutingScreenState extends State<DomainRoutingScreen> {
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Маршрутизация доменов'),
-          bottom: const TabBar(
-            tabs: [
+          bottom: TabBar(
+            tabs: const [
               Tab(text: 'Проксировать'),
               Tab(text: 'Обход'),
             ],
@@ -37,15 +33,17 @@ class _DomainRoutingScreenState extends State<DomainRoutingScreen> {
               domains: settings.proxyDomains,
               onAdd: (domain) => _addDomain(vpn, settings, domain, true),
               onRemove: (domain) => _removeDomain(vpn, settings, domain, true),
-              title: 'Проксировать домены',
-              subtitle: 'Эти домены всегда будут идти через VPN',
+              hint: 'example.com',
+              emptyIcon: Icons.shield_outlined,
+              emptyText: 'Нет прокси-доменов',
             ),
             _DomainList(
               domains: settings.directDomains,
               onAdd: (domain) => _addDomain(vpn, settings, domain, false),
               onRemove: (domain) => _removeDomain(vpn, settings, domain, false),
-              title: 'Обход доменов',
-              subtitle: 'Эти домены всегда будут идти напрямую',
+              hint: 'example.com',
+              emptyIcon: Icons.block_outlined,
+              emptyText: 'Нет доменов для обхода',
             ),
           ],
         ),
@@ -69,6 +67,7 @@ class _DomainRoutingScreenState extends State<DomainRoutingScreen> {
         proxyDomains: isProxy ? newList : settings.proxyDomains,
         directDomains: isProxy ? settings.directDomains : newList,
         splitMode: settings.splitMode,
+        adDisabled: settings.adDisabled,
       ));
     }
   }
@@ -91,74 +90,116 @@ class _DomainRoutingScreenState extends State<DomainRoutingScreen> {
   }
 }
 
-class _DomainList extends StatelessWidget {
+class _DomainList extends StatefulWidget {
   final List<String> domains;
   final Function(String) onAdd;
   final Function(String) onRemove;
-  final String title;
-  final String subtitle;
+  final String hint;
+  final IconData emptyIcon;
+  final String emptyText;
 
   const _DomainList({
     required this.domains,
     required this.onAdd,
     required this.onRemove,
-    required this.title,
-    required this.subtitle,
+    required this.hint,
+    required this.emptyIcon,
+    required this.emptyText,
   });
 
   @override
+  State<_DomainList> createState() => _DomainListState();
+}
+
+class _DomainListState extends State<_DomainList> {
+  final _controller = TextEditingController();
+
+  void _submit() {
+    final text = _controller.text.trim();
+    if (text.isNotEmpty) {
+      widget.onAdd(text);
+      _controller.clear();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final controller = TextEditingController();
-    final theme = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
             children: [
-              Text(title, style: theme.textTheme.titleMedium),
-              Text(subtitle, style: theme.textTheme.bodySmall),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextField(
-                      controller: controller,
-                      decoration: const InputDecoration(
-                        hintText: 'example.com или .google.com',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(horizontal: 12),
-                      ),
+              Expanded(
+                child: TextField(
+                  controller: _controller,
+                  decoration: InputDecoration(
+                    hintText: widget.hint,
+                    prefixIcon: const Icon(Icons.language, size: 20),
+                    suffixIcon: IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: _submit,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  IconButton.filled(
-                    onPressed: () {
-                      onAdd(controller.text);
-                      controller.clear();
-                    },
-                    icon: const Icon(Icons.add),
-                  ),
-                ],
+                  onSubmitted: (_) => _submit(),
+                ),
               ),
             ],
           ),
         ),
         Expanded(
-          child: ListView.builder(
-            itemCount: domains.length,
-            itemBuilder: (context, index) {
-              return ListTile(
-                title: Text(domains[index]),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline),
-                  onPressed: () => onRemove(domains[index]),
+          child: widget.domains.isEmpty
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(widget.emptyIcon, size: 48, color: cs.onSurfaceVariant.withValues(alpha: 0.4)),
+                      const SizedBox(height: 12),
+                      Text(widget.emptyText, style: TextStyle(color: cs.onSurfaceVariant)),
+                    ],
+                  ),
+                )
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  itemCount: widget.domains.length,
+                  itemBuilder: (context, index) {
+                    return Card(
+                      elevation: 0,
+                      color: cs.surfaceContainerLow,
+                      margin: const EdgeInsets.only(bottom: 4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: cs.secondaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.language, size: 18, color: cs.onSecondaryContainer),
+                        ),
+                        title: Text(widget.domains[index]),
+                        trailing: IconButton(
+                          icon: Icon(Icons.delete_outline, color: cs.error.withValues(alpha: 0.7)),
+                          onPressed: () => widget.onRemove(widget.domains[index]),
+                          tooltip: 'Удалить',
+                        ),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+                      ),
+                    );
+                  },
                 ),
-              );
-            },
-          ),
         ),
       ],
     );

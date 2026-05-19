@@ -23,6 +23,7 @@ class VpnSettings {
   List<String> proxyDomains;
   List<String> directDomains;
   String splitMode; // 'direct' (selected apps bypass VPN) or 'route' (selected apps go through VPN)
+  bool adDisabled;
 
   VpnSettings({
     this.socksPort = 10808,
@@ -35,6 +36,7 @@ class VpnSettings {
     this.proxyDomains = const [],
     this.directDomains = const [],
     this.splitMode = 'direct',
+    this.adDisabled = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -48,6 +50,7 @@ class VpnSettings {
     'proxyDomains': proxyDomains,
     'directDomains': directDomains,
     'splitMode': splitMode,
+    'adDisabled': adDisabled,
   };
 
   factory VpnSettings.fromJson(Map<String, dynamic> json) => VpnSettings(
@@ -61,6 +64,7 @@ class VpnSettings {
     proxyDomains: List<String>.from(json['proxyDomains'] ?? []),
     directDomains: List<String>.from(json['directDomains'] ?? []),
     splitMode: json['splitMode'] ?? 'direct',
+    adDisabled: json['adDisabled'] ?? false,
   );
 }
 
@@ -689,13 +693,46 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
+  bool _pingInProgress = false;
+
   void _startTimer() {
     _duration = Duration.zero;
     _connectionTimer?.cancel();
     _connectionTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       _duration = Duration(seconds: _duration.inSeconds + 1);
+      _checkServerPingPeriodically();
       notifyListeners();
     });
+  }
+
+  Future<void> _checkServerPingPeriodically() async {
+    if (_pingInProgress || _selectedServer == null) return;
+    _pingInProgress = true;
+    try {
+      final ping = await flutterV2ray
+          .getServerDelay(config: _selectedServer!.config)
+          .timeout(const Duration(seconds: 2));
+      if (_selectedServer != null) {
+        final index = _servers.indexWhere(
+          (s) => s.config == _selectedServer!.config && s.name == _selectedServer!.name,
+        );
+        if (index != -1) {
+          final updated = ServerInfo(
+            name: _selectedServer!.name,
+            country: _selectedServer!.country,
+            protocol: _selectedServer!.protocol,
+            ping: ping,
+            group: _selectedServer!.group,
+            config: _selectedServer!.config,
+          );
+          _servers[index] = updated;
+          _selectedServer = updated;
+          notifyListeners();
+          _saveServers();
+        }
+      }
+    } catch (_) {}
+    _pingInProgress = false;
   }
 
   void _stopTimer() {
@@ -720,7 +757,15 @@ class VpnProvider extends ChangeNotifier {
   final Map<String, String> _groupSources = {};
   Map<String, String> get groupSources => _groupSources;
 
+  final Set<String> _pingingServers = {};
+  Set<String> get pingingServers => _pingingServers;
+
+  String _serverKey(ServerInfo server) => '${server.config}::${server.name}';
+
   Future<void> checkServerPing(ServerInfo server) async {
+    final key = _serverKey(server);
+    _pingingServers.add(key);
+    notifyListeners();
     try {
       final ping = await flutterV2ray
           .getServerDelay(config: server.config)
@@ -742,7 +787,6 @@ class VpnProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error checking ping: $e');
-      // Set ping to -1 on timeout or error
       final index = _servers.indexWhere(
         (s) => s.config == server.config && s.name == server.name,
       );
@@ -758,6 +802,8 @@ class VpnProvider extends ChangeNotifier {
         notifyListeners();
       }
     }
+    _pingingServers.remove(key);
+    notifyListeners();
   }
 
   Future<void> checkGroupPing(String groupName) async {
