@@ -735,7 +735,7 @@ class VpnProvider extends ChangeNotifier {
   VpnStatus get status => _status;
   ServerInfo? get selectedServer => _selectedServer;
 
-  void toggleConnection() async {
+  Future<void> toggleConnection() async {
     if (_selectedServer == null) return;
 
     if (!_v2rayInitialized) {
@@ -977,8 +977,8 @@ class VpnProvider extends ChangeNotifier {
         _saveServers();
         notifyListeners();
         // Reconnect to new server
-        toggleConnection(); // disconnect
-        toggleConnection(); // connect
+        await toggleConnection(); // disconnect
+        await toggleConnection(); // connect
         return;
       }
     }
@@ -1139,12 +1139,11 @@ class VpnProvider extends ChangeNotifier {
     return (ok: false, count: 0);
   }
 
-  void selectServer(ServerInfo server) {
+  Future<void> selectServer(ServerInfo server) async {
     _selectedServer = server;
     if (_status == VpnStatus.connected) {
-      // Reconnect if already connected
-      toggleConnection(); // Disconnect
-      toggleConnection(); // Reconnect
+      await toggleConnection(); // Disconnect
+      await toggleConnection(); // Reconnect
     }
     notifyListeners();
   }
