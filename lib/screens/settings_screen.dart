@@ -89,6 +89,15 @@ class SettingsScreen extends StatelessWidget {
             onTap: () => _showLanguageDialog(context, vpn),
           ),
           _SettingTile(
+            icon: Icons.dark_mode,
+            title: 'AMOLED тема',
+            subtitle: 'Глубокий чёрный фон в тёмной теме',
+            trailing: Switch(
+              value: s.amoledDark,
+              onChanged: (val) => vpn.updateSettings(s.copyWith(amoledDark: val)),
+            ),
+          ),
+          _SettingTile(
             icon: Icons.campaign_outlined,
             title: 'Отключить рекламу',
             subtitle: 'Показывать рекламу. Пожалуйста, не нажимайте данную галочку :(',

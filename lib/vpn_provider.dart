@@ -34,6 +34,7 @@ class VpnSettings {
   String observatoryGroup;
   int observatoryInterval;
   bool observatoryAutoSwitch;
+  bool amoledDark;
 
   VpnSettings({
     this.socksPort = 10808,
@@ -57,6 +58,7 @@ class VpnSettings {
     this.observatoryGroup = '',
     this.observatoryInterval = 60,
     this.observatoryAutoSwitch = true,
+    this.amoledDark = false,
   });
 
   Map<String, dynamic> toJson() => {
@@ -81,6 +83,7 @@ class VpnSettings {
     'observatoryGroup': observatoryGroup,
     'observatoryInterval': observatoryInterval,
     'observatoryAutoSwitch': observatoryAutoSwitch,
+    'amoledDark': amoledDark,
   };
 
   VpnSettings copyWith({
@@ -105,6 +108,7 @@ class VpnSettings {
     String? observatoryGroup,
     int? observatoryInterval,
     bool? observatoryAutoSwitch,
+    bool? amoledDark,
   }) => VpnSettings(
     socksPort: socksPort ?? this.socksPort,
     httpPort: httpPort ?? this.httpPort,
@@ -127,6 +131,7 @@ class VpnSettings {
     observatoryGroup: observatoryGroup ?? this.observatoryGroup,
     observatoryInterval: observatoryInterval ?? this.observatoryInterval,
     observatoryAutoSwitch: observatoryAutoSwitch ?? this.observatoryAutoSwitch,
+    amoledDark: amoledDark ?? this.amoledDark,
   );
 
   factory VpnSettings.fromJson(Map<String, dynamic> json) => VpnSettings(
@@ -151,6 +156,7 @@ class VpnSettings {
     observatoryGroup: json['observatoryGroup'] ?? '',
     observatoryInterval: json['observatoryInterval'] ?? 60,
     observatoryAutoSwitch: json['observatoryAutoSwitch'] ?? true,
+    amoledDark: json['amoledDark'] ?? false,
   );
 }
 

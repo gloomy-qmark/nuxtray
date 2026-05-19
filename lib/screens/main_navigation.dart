@@ -1,7 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:nuxtray/screens/home_screen.dart';
 import 'package:nuxtray/screens/server_list_screen.dart';
+import 'package:nuxtray/vpn_provider.dart';
 
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
@@ -37,6 +39,7 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bottomPadding = MediaQuery.of(context).padding.bottom;
+    final isAmoled = context.watch<VpnProvider>().settings.amoledDark;
 
     return Scaffold(
       extendBody: true,
@@ -61,7 +64,9 @@ class _MainNavigationState extends State<MainNavigation> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.surface.withAlpha(180),
+                      color: isAmoled
+                          ? Colors.black.withAlpha(220)
+                          : theme.colorScheme.surface.withAlpha(180),
                       borderRadius: BorderRadius.circular(32),
                       border: Border.all(
                         color: theme.colorScheme.outline.withAlpha(50),
