@@ -54,7 +54,7 @@ vless://  vmess://  ss://  trojan://  hysteria2://  hy2://  wireguard://
 
 ```bash
 # Clone
-git clone https://github.com/YOUR_USERNAME/nuxtray.git
+git clone https://github.com/gloomy-qmark/nuxtray.git
 cd nuxtray
 
 # Get dependencies
