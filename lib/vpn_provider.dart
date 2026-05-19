@@ -345,6 +345,118 @@ class ServerInfo {
   );
 }
 
+class SubscriptionMeta {
+  final String? profileTitle;
+  final String? announce;
+  final int upload;
+  final int download;
+  final int total;
+  final int? expire;
+  final int? updateInterval;
+  final String? supportUrl;
+  final String? filename;
+  final bool hasTrafficInfo;
+
+  SubscriptionMeta({
+    this.profileTitle,
+    this.announce,
+    this.upload = 0,
+    this.download = 0,
+    this.total = 0,
+    this.expire,
+    this.updateInterval,
+    this.supportUrl,
+    this.filename,
+    this.hasTrafficInfo = false,
+  });
+
+  int get remainingTraffic {
+    if (total <= 0) return -1;
+    return total - upload - download;
+  }
+
+  bool get isUnlimited => total == 0 && hasTrafficInfo;
+
+  Duration? get remainingTime {
+    if (expire == null) return null;
+    final remaining = expire! - DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    if (remaining <= 0) return Duration.zero;
+    return Duration(seconds: remaining);
+  }
+
+  Map<String, dynamic> toJson() => {
+    'profileTitle': profileTitle,
+    'announce': announce,
+    'upload': upload,
+    'download': download,
+    'total': total,
+    'expire': expire,
+    'updateInterval': updateInterval,
+    'supportUrl': supportUrl,
+    'filename': filename,
+    'hasTrafficInfo': hasTrafficInfo,
+  };
+
+  factory SubscriptionMeta.fromJson(Map<String, dynamic> json) => SubscriptionMeta(
+    profileTitle: json['profileTitle'] as String?,
+    announce: json['announce'] as String?,
+    upload: json['upload'] as int? ?? 0,
+    download: json['download'] as int? ?? 0,
+    total: json['total'] as int? ?? 0,
+    expire: json['expire'] as int?,
+    updateInterval: json['updateInterval'] as int?,
+    supportUrl: json['supportUrl'] as String?,
+    filename: json['filename'] as String?,
+    hasTrafficInfo: json['hasTrafficInfo'] as bool? ?? false,
+  );
+
+  static SubscriptionMeta fromHeaders(Map<String, String> headers) {
+    String? decodeBase64(String? val) {
+      if (val == null) return null;
+      final stripped = val.startsWith('base64:') ? val.substring(7) : val;
+      try {
+        return utf8.decode(base64.decode(stripped));
+      } catch (_) {
+        return val;
+      }
+    }
+
+    final userinfo = headers['subscription-userinfo'] ?? '';
+    int upload = 0, download = 0, total = 0;
+    int? expire;
+    bool hasTrafficInfo = userinfo.isNotEmpty;
+    for (final part in userinfo.split(';')) {
+      final pair = part.trim().split('=');
+      if (pair.length != 2) continue;
+      switch (pair[0]) {
+        case 'upload': upload = int.tryParse(pair[1]) ?? 0;
+        case 'download': download = int.tryParse(pair[1]) ?? 0;
+        case 'total': total = int.tryParse(pair[1]) ?? 0;
+        case 'expire': expire = int.tryParse(pair[1]);
+      }
+    }
+
+    return SubscriptionMeta(
+      profileTitle: decodeBase64(headers['profile-title']),
+      announce: decodeBase64(headers['announce']),
+      upload: upload,
+      download: download,
+      total: total,
+      expire: expire,
+      hasTrafficInfo: hasTrafficInfo,
+      updateInterval: int.tryParse(headers['profile-update-interval'] ?? ''),
+      supportUrl: headers['support-url'],
+      filename: headers['content-disposition']?.contains('filename=') == true
+          ? headers['content-disposition']!
+              .split('filename=')
+              .last
+              .trim()
+              .replaceAll('"', '')
+          : null,
+    );
+  }
+}
+
 class VpnProvider extends ChangeNotifier {
   VpnStatus _status = VpnStatus.disconnected;
   ServerInfo? _selectedServer;
@@ -439,7 +551,7 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
-  Future<bool> addSubscription(String input) async {
+  Future<bool> addSubscription(String input, {String? forceGroupName}) async {
     final trimmed = input.trim();
     if (trimmed.isEmpty) return false;
 
@@ -448,12 +560,10 @@ class VpnProvider extends ChangeNotifier {
         final uri = Uri.parse(trimmed);
         final host = uri.host;
 
-        // Reuse existing name for this URL or generate a new one
-        final existingName = _groupSources.entries
+        final groupName = forceGroupName ?? _groupSources.entries
             .where((e) => e.value == trimmed)
             .map((e) => e.key)
-            .firstOrNull;
-        final groupName = existingName ?? _nextGroupName(host);
+            .firstOrNull ?? _nextGroupName(host);
 
         // Fetch from URL with custom headers
         final response = await http.get(
@@ -474,30 +584,40 @@ class VpnProvider extends ChangeNotifier {
 
         if (response.statusCode == 200) {
           _groupSources[groupName] = trimmed; // Store the source URL
+          _subscriptionMeta[groupName] = SubscriptionMeta.fromHeaders(response.headers);
           final body = response.body.trim();
+
+          // Log full response info
+          debugPrint('=== RESPONSE ===');
+          debugPrint('Status: ${response.statusCode} ${response.reasonPhrase}');
+          debugPrint('Headers:');
+          response.headers.forEach((k, v) => debugPrint('  $k: $v'));
+          debugPrint('=== RAW BODY (${body.length} chars) ===');
+          debugPrint(body);
+
+          // Decode (JSON or base64) for both logging and parsing
+          String decoded;
           try {
             final data = json.decode(body);
-
-            debugPrint(data.toString());
-            
-            if (data is List) {
-              for (var item in data) {
-                _parseAndAddServer(item.toString(), groupName);
-              }
-            } else {
-              _parseAndAddServer(data.toString(), groupName);
-            }
-          } catch (e) {
+            decoded = data is List ? data.join('\n') : data.toString();
+            final pretty = const JsonEncoder.withIndent('  ').convert(data);
+            debugPrint('=== JSON (${pretty.length} chars) ===');
+            debugPrint(pretty.length > 8000 ? '${pretty.substring(0, 8000)}...' : pretty);
+          } catch (_) {
             try {
-              String decoded = utf8.decode(base64.decode(body));
-              final lines = decoded.split(RegExp(r'[\n\r]+'));
-              for (var line in lines) {
-                if (line.trim().isNotEmpty) {
-                  _parseAndAddServer(line.trim(), groupName);
-                }
-              }
-            } catch (e2) {
-              _parseAndAddServer(body, groupName);
+              decoded = utf8.decode(base64.decode(body));
+              debugPrint('=== BASE64 (${decoded.length} chars) ===');
+              debugPrint(decoded);
+            } catch (_) {
+              decoded = body;
+            }
+          }
+
+          // Parse servers
+          final lines = decoded.split(RegExp(r'[\n\r]+'));
+          for (var line in lines) {
+            if (line.trim().isNotEmpty) {
+              _parseAndAddServer(line.trim(), groupName);
             }
           }
           return true;
@@ -607,6 +727,10 @@ class VpnProvider extends ChangeNotifier {
       final data = {
         'servers': _servers.map((s) => s.toJson()).toList(),
         'settings': _settings.toJson(),
+        'groupSources': _groupSources,
+        'subscriptionMeta': _subscriptionMeta.map(
+          (k, v) => MapEntry(k, v.toJson()),
+        ),
       };
       await file.writeAsString(jsonEncode(data));
     } catch (e) {
@@ -633,6 +757,18 @@ class VpnProvider extends ChangeNotifier {
           }
           if (data['settings'] != null) {
             _settings = VpnSettings.fromJson(data['settings']);
+          }
+          if (data['groupSources'] != null) {
+            _groupSources.clear();
+            _groupSources.addAll((data['groupSources'] as Map).cast<String, String>());
+          }
+          if (data['subscriptionMeta'] != null) {
+            _subscriptionMeta.clear();
+            _subscriptionMeta.addAll(
+              (data['subscriptionMeta'] as Map).map(
+                (k, v) => MapEntry(k as String, SubscriptionMeta.fromJson(v as Map<String, dynamic>)),
+              ),
+            );
           }
         } else if (data is List) {
           _servers.clear();
@@ -903,6 +1039,7 @@ class VpnProvider extends ChangeNotifier {
   }
 
   Timer? _observatoryTimer;
+  bool _observatoryRunning = false;
 
   List<String> get observatoryGroupNames =>
       _servers.map((s) => s.group).toSet().toList()..sort();
@@ -926,9 +1063,12 @@ class VpnProvider extends ChangeNotifier {
   void _stopObservatory() {
     _observatoryTimer?.cancel();
     _observatoryTimer = null;
+    _observatoryRunning = false;
   }
 
   Future<void> _runObservatory() async {
+    if (_observatoryRunning) return;
+    _observatoryRunning = true;
     final group = _settings.observatoryGroup;
     if (group.isEmpty) return;
     final servers = _servers.where((s) => s.group == group).toList();
@@ -976,15 +1116,26 @@ class VpnProvider extends ChangeNotifier {
         _selectedServer = best.server;
         _saveServers();
         notifyListeners();
-        // Reconnect to new server
-        await toggleConnection(); // disconnect
-        await toggleConnection(); // connect
+        // Reconnect to new server without re-requesting VPN permission
+        final config = _settings.killSwitch || _settings.proxyDomains.isNotEmpty || _settings.directDomains.isNotEmpty
+            ? _injectRouting(_selectedServer!.config)
+            : _selectedServer!.config;
+        _status = VpnStatus.connecting;
+        notifyListeners();
+        await flutterV2ray.stopVless();
+        await Future.delayed(const Duration(milliseconds: 500));
+        await flutterV2ray.startVless(
+          remark: _selectedServer!.name,
+          config: config,
+        );
+        _observatoryRunning = false;
         return;
       }
     }
 
     _saveServers();
     notifyListeners();
+    _observatoryRunning = false;
   }
 
   String _formatSpeed(int bytes) {
@@ -1003,6 +1154,10 @@ class VpnProvider extends ChangeNotifier {
 
   final Map<String, String> _groupSources = {}; // displayName → fullUrl
   Map<String, String> get groupSources => _groupSources;
+
+  final Map<String, SubscriptionMeta> _subscriptionMeta = {};
+  Map<String, SubscriptionMeta> get subscriptionMeta => Map.unmodifiable(_subscriptionMeta);
+  SubscriptionMeta? metaForGroup(String group) => _subscriptionMeta[group];
 
   String _nextGroupName(String host) {
     if (!_groupSources.keys.any((k) => k == host || k.startsWith('$host ('))) {
@@ -1129,13 +1284,15 @@ class VpnProvider extends ChangeNotifier {
     final url = _groupSources[groupName];
     if (url != null) {
       _servers.removeWhere((s) => s.group == groupName);
+      _subscriptionMeta.remove(groupName);
       if (_selectedServer?.group == groupName) {
         _selectedServer = null;
       }
-      final ok = await addSubscription(url);
+      final ok = await addSubscription(url, forceGroupName: groupName);
       notifyListeners();
       return (ok: ok, count: _servers.where((s) => s.group == groupName).length);
     }
+    debugPrint('syncGroup: no URL found for group "$groupName"');
     return (ok: false, count: 0);
   }
 

@@ -210,6 +210,10 @@ class _AnimatedServerGroupState extends State<_AnimatedServerGroup>
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
+    final hasUrl = vpn.groupSources.containsKey(widget.name);
+    final meta = vpn.metaForGroup(widget.name);
+    final displayName = meta?.profileTitle ?? widget.name;
+
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
       duration: Duration(milliseconds: 300 + (widget.index * 80).toInt()),
@@ -246,7 +250,7 @@ class _AnimatedServerGroupState extends State<_AnimatedServerGroup>
                       const SizedBox(width: 40),
                       Expanded(
                         child: Text(
-                          widget.name,
+                          displayName,
                           textAlign: TextAlign.center,
                           style: theme.textTheme.titleMedium?.copyWith(
                             fontWeight: FontWeight.bold,
@@ -292,16 +296,17 @@ class _AnimatedServerGroupState extends State<_AnimatedServerGroup>
                             }
                           },
                           itemBuilder: (context) => [
-                            PopupMenuItem(
-                              value: _GroupAction.sync,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.sync, size: 20, color: cs.onSurfaceVariant),
-                                  const SizedBox(width: 12),
-                                  const Text('Синхронизировать'),
-                                ],
+                            if (hasUrl)
+                              PopupMenuItem(
+                                value: _GroupAction.sync,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.sync, size: 20, color: cs.onSurfaceVariant),
+                                    const SizedBox(width: 12),
+                                    const Text('Синхронизировать'),
+                                  ],
+                                ),
                               ),
-                            ),
                             PopupMenuItem(
                               value: _GroupAction.ping,
                               child: Row(
@@ -335,17 +340,34 @@ class _AnimatedServerGroupState extends State<_AnimatedServerGroup>
                 axisAlignment: -1.0,
                 sizeFactor: _expandAnimation,
                 child: Column(
-                  children: List.generate(widget.servers.length, (i) {
-                    final server = widget.servers[i];
-                    final isSelected = widget.selectedServer == server;
-                    return _StaggeredServerCard(
-                      index: i,
-                      server: server,
-                      isSelected: isSelected,
-                      onTap: () => widget.onServerTap(server),
-                      expandAnimation: _expandAnimation,
-                    );
-                  }),
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // --- ИНФОРМАЦИОННАЯ ПЛАШКА ---
+                    _SubscriptionInfoPanel(
+                      meta: vpn.metaForGroup(widget.name),
+                      theme: theme,
+                      cs: cs,
+                    ),
+                    // Разделитель между инфо-плашкой и списком серверов
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Divider(color: cs.outlineVariant.withValues(alpha: 0.2), height: 1),
+                    ),
+                    // --- КОНЕЦ ИНФОРМАЦИОННОЙ ПЛАШКИ ---
+
+                    // Список серверов
+                    ...List.generate(widget.servers.length, (i) {
+                      final server = widget.servers[i];
+                      final isSelected = widget.selectedServer == server;
+                      return _StaggeredServerCard(
+                        index: i,
+                        server: server,
+                        isSelected: isSelected,
+                        onTap: () => widget.onServerTap(server),
+                        expandAnimation: _expandAnimation,
+                      );
+                    }),
+                  ],
                 ),
               ),
             ],
@@ -519,19 +541,17 @@ class _ProtocolChip extends StatelessWidget {
 class _PingBadge extends StatelessWidget {
   final int ping;
   final bool isSelected;
+
   const _PingBadge({required this.ping, required this.isSelected});
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final color = ping == -1
-        ? cs.error
-        : ping < 100
-            ? cs.primary
-            : ping < 250
-                ? cs.tertiary
-                : cs.error;
-
+    final color = ping <= 100
+        ? Colors.green
+        : ping <= 250
+            ? Colors.orange
+            : Colors.red;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
@@ -545,6 +565,121 @@ class _PingBadge extends StatelessWidget {
           fontSize: 10,
           fontWeight: FontWeight.w600,
         ),
+      ),
+    );
+  }
+}
+
+class _SubscriptionInfoPanel extends StatelessWidget {
+  final SubscriptionMeta? meta;
+  final ThemeData theme;
+  final ColorScheme cs;
+
+  const _SubscriptionInfoPanel({
+    required this.meta,
+    required this.theme,
+    required this.cs,
+  });
+
+  String _formatBytes(int bytes) {
+    if (bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    int i = 0;
+    double size = bytes.toDouble();
+    while (size >= 1024 && i < units.length - 1) {
+      size /= 1024;
+      i++;
+    }
+    return '${size.toStringAsFixed(size >= 100 ? 0 : 1)} ${units[i]}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (meta == null) return const SizedBox.shrink();
+
+    final remaining = meta!.remainingTime;
+    final announce = meta!.announce;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (meta!.hasTrafficInfo || meta!.expire != null)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                if (remaining != null)
+                  Text(
+                    remaining == Duration.zero
+                        ? 'Истёк'
+                        : 'Осталось ${remaining.inDays} дн.',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: remaining == Duration.zero
+                          ? cs.error
+                          : cs.onSurfaceVariant.withValues(alpha: 0.7),
+                    ),
+                  ),
+                if (meta!.hasTrafficInfo)
+                  Text(
+                    meta!.isUnlimited
+                        ? '${_formatBytes(meta!.download)} / ∞'
+                        : '${_formatBytes(meta!.download)} / ${_formatBytes(meta!.total)}',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: cs.onSurfaceVariant.withValues(alpha: 0.7),
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+              ],
+            ),
+          if (meta!.hasTrafficInfo || meta!.expire != null)
+            const SizedBox(height: 12),
+
+          // if (title != null)
+          //   Padding(
+          //     padding: const EdgeInsets.only(bottom: 4),
+          //     child: Text(
+          //       title,
+          //       textAlign: TextAlign.center,
+          //       style: theme.textTheme.bodyLarge?.copyWith(
+          //         fontWeight: FontWeight.bold,
+          //         color: cs.onSurface,
+          //       ),
+          //     ),
+          //   ),
+
+          if (announce != null)
+            Text(
+              announce,
+              textAlign: TextAlign.center,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: cs.onSurface.withValues(alpha: 0.7),
+              ),
+            ),
+
+          // if (supportUrl != null) ...[
+          //   const SizedBox(height: 12),
+          //   SizedBox(
+          //     width: double.infinity,
+          //     child: TextButton.icon(
+          //       onPressed: () => _openUrl(supportUrl),
+          //       style: TextButton.styleFrom(
+          //         backgroundColor: cs.primaryContainer.withValues(alpha: 0.4),
+          //         foregroundColor: cs.onPrimaryContainer,
+          //         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          //         shape: RoundedRectangleBorder(
+          //           borderRadius: BorderRadius.circular(12),
+          //         ),
+          //       ),
+          //       icon: const Icon(Icons.help_outline_rounded, size: 18),
+          //       label: const Text(
+          //         'Поддержка',
+          //         style: TextStyle(fontWeight: FontWeight.w500),
+          //       ),
+          //     ),
+          //   ),
+          // ],
+        ],
       ),
     );
   }
