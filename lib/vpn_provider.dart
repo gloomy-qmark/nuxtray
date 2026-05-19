@@ -440,7 +440,7 @@ class VpnProvider extends ChangeNotifier {
     try {
       if (trimmed.startsWith('http')) {
         final uri = Uri.parse(trimmed);
-        final groupName = uri.host;
+        final groupName = uri.host + uri.path;
 
         // Fetch from URL with custom headers
         final response = await http.get(
