@@ -47,7 +47,7 @@ vless://  vmess://  ss://  trojan://  hysteria2://  hy2://  wireguard://
 
 | Home | Servers | Settings |
 |---|---|---|
-| *(coming soon)* | *(coming soon)* | *(coming soon)* |
+| <img src="assets/images/home.jpg" width="240"> | <img src="assets/images/servers.jpg" width="240"> | <img src="assets/images/settings.jpg" width="240"> |
 
 ## Getting Started
 
