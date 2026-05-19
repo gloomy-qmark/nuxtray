@@ -185,9 +185,17 @@ class NuxtrayApp extends StatelessWidget {
   }
 
   ThemeData _buildDarkTheme(ColorScheme cs, [bool amoled = false]) {
-    final bg = amoled ? Colors.black : cs.surface;
-    final cardColor = amoled ? Colors.black : cs.surfaceContainerLow;
-    final dialogColor = amoled ? const Color(0xFF0A0A0A) : cs.surfaceContainerLow;
+    if (amoled) {
+      cs = cs.copyWith(
+        surface: Colors.black,
+        surfaceContainerLowest: Colors.black,
+        surfaceContainerLow: Colors.black,
+        surfaceContainer: Colors.black,
+        surfaceContainerHigh: Colors.black,
+        surfaceContainerHighest: Colors.black,
+        surfaceTint: Colors.transparent,
+      );
+    }
 
     return ThemeData(
       useMaterial3: true,
@@ -195,7 +203,7 @@ class NuxtrayApp extends StatelessWidget {
       textTheme: GoogleFonts.googleSansTextTheme(
         ThemeData.dark().textTheme,
       ),
-      scaffoldBackgroundColor: bg,
+      scaffoldBackgroundColor: cs.surface,
 
       appBarTheme: AppBarTheme(
         centerTitle: true,
@@ -210,7 +218,7 @@ class NuxtrayApp extends StatelessWidget {
         elevation: 0,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         clipBehavior: Clip.antiAlias,
-        color: cardColor,
+        color: cs.surfaceContainerLow,
       ),
 
       switchTheme: SwitchThemeData(
@@ -226,17 +234,17 @@ class NuxtrayApp extends StatelessWidget {
 
       dialogTheme: DialogThemeData(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-        backgroundColor: dialogColor,
+        backgroundColor: cs.surfaceContainerLow,
       ),
 
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: amoled ? Colors.black : null,
+        backgroundColor: cs.surface,
         surfaceTintColor: Colors.transparent,
       ),
 
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: amoled ? const Color(0xFF1A1A1A) : cs.surfaceContainerHighest.withValues(alpha: 0.3),
+        fillColor: cs.surfaceContainerHighest.withValues(alpha: amoled ? 1.0 : 0.3),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
@@ -285,7 +293,6 @@ class NuxtrayApp extends StatelessWidget {
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        backgroundColor: amoled ? const Color(0xFF1A1A1A) : null,
       ),
 
       listTileTheme: ListTileThemeData(
