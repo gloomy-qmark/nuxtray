@@ -26,6 +26,10 @@ class VpnSettings {
   bool adDisabled;
   bool killSwitch;
   bool autoStart;
+  String geoipUrl;
+  String geositeUrl;
+  int geoipUpdatedAt;
+  int geositeUpdatedAt;
 
   VpnSettings({
     this.socksPort = 10808,
@@ -41,6 +45,10 @@ class VpnSettings {
     this.adDisabled = false,
     this.killSwitch = false,
     this.autoStart = false,
+    this.geoipUrl = '',
+    this.geositeUrl = '',
+    this.geoipUpdatedAt = 0,
+    this.geositeUpdatedAt = 0,
   });
 
   Map<String, dynamic> toJson() => {
@@ -57,6 +65,10 @@ class VpnSettings {
     'adDisabled': adDisabled,
     'killSwitch': killSwitch,
     'autoStart': autoStart,
+    'geoipUrl': geoipUrl,
+    'geositeUrl': geositeUrl,
+    'geoipUpdatedAt': geoipUpdatedAt,
+    'geositeUpdatedAt': geositeUpdatedAt,
   };
 
   VpnSettings copyWith({
@@ -73,6 +85,10 @@ class VpnSettings {
     bool? adDisabled,
     bool? killSwitch,
     bool? autoStart,
+    String? geoipUrl,
+    String? geositeUrl,
+    int? geoipUpdatedAt,
+    int? geositeUpdatedAt,
   }) => VpnSettings(
     socksPort: socksPort ?? this.socksPort,
     httpPort: httpPort ?? this.httpPort,
@@ -85,8 +101,12 @@ class VpnSettings {
     directDomains: directDomains ?? this.directDomains,
     splitMode: splitMode ?? this.splitMode,
     adDisabled: adDisabled ?? this.adDisabled,
-    killSwitch: killSwitch ?? this.killSwitch ?? false,
-    autoStart: autoStart ?? this.autoStart ?? false,
+    killSwitch: killSwitch ?? this.killSwitch,
+    autoStart: autoStart ?? this.autoStart,
+    geoipUrl: geoipUrl ?? this.geoipUrl,
+    geositeUrl: geositeUrl ?? this.geositeUrl,
+    geoipUpdatedAt: geoipUpdatedAt ?? this.geoipUpdatedAt,
+    geositeUpdatedAt: geositeUpdatedAt ?? this.geositeUpdatedAt,
   );
 
   factory VpnSettings.fromJson(Map<String, dynamic> json) => VpnSettings(
@@ -103,6 +123,10 @@ class VpnSettings {
     adDisabled: json['adDisabled'] ?? false,
     killSwitch: json['killSwitch'] ?? false,
     autoStart: json['autoStart'] ?? false,
+    geoipUrl: json['geoipUrl'] ?? '',
+    geositeUrl: json['geositeUrl'] ?? '',
+    geoipUpdatedAt: json['geoipUpdatedAt'] ?? 0,
+    geositeUpdatedAt: json['geositeUpdatedAt'] ?? 0,
   );
 }
 
@@ -551,6 +575,7 @@ class VpnProvider extends ChangeNotifier {
   Future<void> _loadServers() async {
     try {
       final directory = await getApplicationDocumentsDirectory();
+      _docDir = directory.path;
       final file = File('${directory.path}/servers.json');
       if (await file.exists()) {
         final content = await file.readAsString();
@@ -579,6 +604,40 @@ class VpnProvider extends ChangeNotifier {
       }
     } catch (e) {
       debugPrint('Error loading servers: $e');
+    }
+  }
+
+  Future<bool> downloadGeoFile(String url, String type) async {
+    if (url.isEmpty) return false;
+    try {
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 60));
+      if (response.statusCode != 200) return false;
+      final path = type == 'geoip' ? geoipDatPath : geositeDatPath;
+      await File(path).writeAsBytes(response.bodyBytes);
+      final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      updateSettings(_settings.copyWith(
+        geoipUpdatedAt: type == 'geoip' ? now : _settings.geoipUpdatedAt,
+        geositeUpdatedAt: type == 'geosite' ? now : _settings.geositeUpdatedAt,
+      ));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _classifyRules(List<String> entries, List<String> domains, List<String> ips) {
+    for (var entry in entries) {
+      if (entry.startsWith('geoip:')) {
+        ips.add(entry);
+      } else if (entry.startsWith('geosite:')) {
+        domains.add(entry);
+      } else if (entry.startsWith('regexp:')) {
+        domains.add(entry);
+      } else if (entry.contains('/')) {
+        ips.add(entry);
+      } else {
+        domains.add(entry);
+      }
     }
   }
 
@@ -655,8 +714,8 @@ class VpnProvider extends ChangeNotifier {
 
       try {
         String config = _selectedServer!.config;
-        if (_settings.killSwitch) {
-          config = _injectKillSwitch(config);
+        if (_settings.killSwitch || _settings.proxyDomains.isNotEmpty || _settings.directDomains.isNotEmpty) {
+          config = _injectRouting(config);
         }
 
         await flutterV2ray.startVless(
@@ -676,22 +735,80 @@ class VpnProvider extends ChangeNotifier {
     }
   }
 
-  String _injectKillSwitch(String rawConfig) {
+  String _injectRouting(String rawConfig) {
     try {
       final parsed = json.decode(rawConfig);
-      if (parsed is Map<String, dynamic>) {
-        final outbounds = List<Map<String, dynamic>>.from(parsed['outbounds'] ?? []);
-        outbounds.add({'protocol': 'blackhole', 'tag': 'blocked'});
-        parsed['outbounds'] = outbounds;
+      if (parsed is! Map<String, dynamic>) return rawConfig;
 
-        final routing = Map<String, dynamic>.from(parsed['routing'] ?? {});
-        final rules = List<Map<String, dynamic>>.from(routing['rules'] ?? []);
-        rules.add({'type': 'field', 'ip': ['0.0.0.0/0', '::/0'], 'outboundTag': 'blocked'});
-        routing['rules'] = rules;
-        parsed['routing'] = routing;
+      final outbounds = List<Map<String, dynamic>>.from(parsed['outbounds'] ?? []);
+      final routing = Map<String, dynamic>.from(parsed['routing'] ?? {});
+      final rules = List<Map<String, dynamic>>.from(routing['rules'] ?? []);
 
-        return json.encode(parsed);
+      parsed['routing'] = routing;
+
+      // Point V2Ray to our geoip/geosite files
+      if (_settings.geoipUrl.isNotEmpty || _settings.geositeUrl.isNotEmpty) {
+        if (_docDir.isNotEmpty) {
+          parsed['v2ray.dat.asset.path'] = _docDir;
+        }
       }
+
+      // Ensure a direct/freedom outbound exists for bypass rules
+      final hasDirect = outbounds.any((o) => o['tag'] == 'direct');
+      if (_settings.directDomains.isNotEmpty && !hasDirect) {
+        outbounds.add({'protocol': 'freedom', 'tag': 'direct'});
+      }
+
+      // Find proxy outbound tag
+      String proxyTag = '';
+      for (var ob in outbounds) {
+        final tag = ob['tag'] as String?;
+        if (tag == null || tag == 'direct' || tag == 'blocked' || tag == 'dns') continue;
+        proxyTag = tag;
+        break;
+      }
+      if (proxyTag.isEmpty) {
+        proxyTag = 'proxy';
+        if (outbounds.isNotEmpty) {
+          outbounds[0]['tag'] = proxyTag;
+        }
+      }
+
+      // Direct domains (bypass proxy)
+      if (_settings.directDomains.isNotEmpty) {
+        final dirDomains = <String>[];
+        final dirIps = <String>[];
+        _classifyRules(_settings.directDomains, dirDomains, dirIps);
+        if (dirDomains.isNotEmpty) {
+          rules.add({'type': 'field', 'domain': dirDomains, 'outboundTag': 'direct'});
+        }
+        if (dirIps.isNotEmpty) {
+          rules.add({'type': 'field', 'ip': dirIps, 'outboundTag': 'direct'});
+        }
+      }
+
+      // Proxy domains (explicit proxy, before kill switch catch-all)
+      if (_settings.proxyDomains.isNotEmpty) {
+        final prxDomains = <String>[];
+        final prxIps = <String>[];
+        _classifyRules(_settings.proxyDomains, prxDomains, prxIps);
+        if (prxDomains.isNotEmpty) {
+          rules.add({'type': 'field', 'domain': prxDomains, 'outboundTag': proxyTag});
+        }
+        if (prxIps.isNotEmpty) {
+          rules.add({'type': 'field', 'ip': prxIps, 'outboundTag': proxyTag});
+        }
+      }
+
+      // Kill switch (block everything else)
+      if (_settings.killSwitch) {
+        outbounds.add({'protocol': 'blackhole', 'tag': 'blocked'});
+        rules.add({'type': 'field', 'ip': ['0.0.0.0/0', '::/0'], 'outboundTag': 'blocked'});
+      }
+
+      parsed['outbounds'] = outbounds;
+      routing['rules'] = rules;
+      return json.encode(parsed);
     } catch (_) {}
     return rawConfig;
   }
@@ -762,6 +879,10 @@ class VpnProvider extends ChangeNotifier {
 
   final Set<String> _pingingServers = {};
   Set<String> get pingingServers => _pingingServers;
+
+  String _docDir = '';
+  String get geoipDatPath => '$_docDir/geoip.dat';
+  String get geositeDatPath => '$_docDir/geosite.dat';
 
   String _serverKey(ServerInfo server) => '${server.config}::${server.name}';
 
