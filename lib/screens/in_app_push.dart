@@ -49,20 +49,22 @@ class _PushWidget extends StatefulWidget {
 class _PushWidgetState extends State<_PushWidget>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
-  late Animation<double> _slide;
+  late Animation<double> _fade;
+  late Animation<double> _scale;
 
   @override
   void initState() {
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 300),
+      duration: const Duration(milliseconds: 250),
     );
-    _slide = Tween<double>(begin: -1, end: 0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeOutCubic),
+    _fade = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
+    _scale = Tween<double>(begin: 0.85, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeOutBack),
     );
     _controller.forward();
-    Future.delayed(widget.duration + const Duration(milliseconds: 300), () {
+    Future.delayed(widget.duration + const Duration(milliseconds: 250), () {
       if (mounted) _dismiss();
     });
   }
@@ -89,25 +91,47 @@ class _PushWidgetState extends State<_PushWidget>
 
     return GestureDetector(
       onTap: _dismiss,
-      child: AnimatedBuilder(
-        animation: _slide,
-        builder: (context, child) {
-          return Transform.translate(
-            offset: Offset(0, _slide.value * 56),
-            child: Opacity(
-              opacity: 1 - (_slide.value + 1).abs().clamp(0, 1),
-              child: child,
-            ),
-          );
-        },
+      child: FadeTransition(
+        opacity: _fade,
         child: Container(
-          padding: EdgeInsets.only(top: MediaQuery.of(context).padding.top),
-          color: color.withValues(alpha: 0.15),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Text(
-              widget.message,
-              style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w500),
+          color: Colors.black.withValues(alpha: 0.4),
+          alignment: Alignment.center,
+          child: ScaleTransition(
+            scale: _scale,
+            child: GestureDetector(
+              onTap: () {},
+              child: Card(
+                color: cs.surfaceContainerHigh,
+                margin: const EdgeInsets.symmetric(horizontal: 40),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        switch (widget.type) {
+                          PushType.success => Icons.check_circle,
+                          PushType.error => Icons.error,
+                          PushType.info => Icons.info,
+                        },
+                        size: 48,
+                        color: color,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        widget.message,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                          color: cs.onSurface,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ),
           ),
         ),

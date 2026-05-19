@@ -26,6 +26,7 @@ class VpnSettings {
   bool adDisabled;
   bool killSwitch;
   bool autoStart;
+  bool autoRefresh;
   String geoipUrl;
   String geositeUrl;
   int geoipUpdatedAt;
@@ -50,6 +51,7 @@ class VpnSettings {
     this.adDisabled = false,
     this.killSwitch = false,
     this.autoStart = false,
+    this.autoRefresh = true,
     this.geoipUrl = '',
     this.geositeUrl = '',
     this.geoipUpdatedAt = 0,
@@ -75,6 +77,7 @@ class VpnSettings {
     'adDisabled': adDisabled,
     'killSwitch': killSwitch,
     'autoStart': autoStart,
+    'autoRefresh': autoRefresh,
     'geoipUrl': geoipUrl,
     'geositeUrl': geositeUrl,
     'geoipUpdatedAt': geoipUpdatedAt,
@@ -100,6 +103,7 @@ class VpnSettings {
     bool? adDisabled,
     bool? killSwitch,
     bool? autoStart,
+    bool? autoRefresh,
     String? geoipUrl,
     String? geositeUrl,
     int? geoipUpdatedAt,
@@ -123,6 +127,7 @@ class VpnSettings {
     adDisabled: adDisabled ?? this.adDisabled,
     killSwitch: killSwitch ?? this.killSwitch,
     autoStart: autoStart ?? this.autoStart,
+    autoRefresh: autoRefresh ?? this.autoRefresh,
     geoipUrl: geoipUrl ?? this.geoipUrl,
     geositeUrl: geositeUrl ?? this.geositeUrl,
     geoipUpdatedAt: geoipUpdatedAt ?? this.geoipUpdatedAt,
@@ -148,6 +153,7 @@ class VpnSettings {
     adDisabled: json['adDisabled'] ?? false,
     killSwitch: json['killSwitch'] ?? false,
     autoStart: json['autoStart'] ?? false,
+    autoRefresh: json['autoRefresh'] ?? true,
     geoipUrl: json['geoipUrl'] ?? '',
     geositeUrl: json['geositeUrl'] ?? '',
     geoipUpdatedAt: json['geoipUpdatedAt'] ?? 0,
@@ -525,7 +531,6 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
 
       flutterV2ray.onStatusChanged.listen((status) {
-        debugPrint('V2Ray Status: ${status.state}');
         _upSpeed = _formatSpeed(status.uploadSpeed);
         _downSpeed = _formatSpeed(status.downloadSpeed);
 
@@ -587,27 +592,15 @@ class VpnProvider extends ChangeNotifier {
           _subscriptionMeta[groupName] = SubscriptionMeta.fromHeaders(response.headers);
           final body = response.body.trim();
 
-          // Log full response info
-          debugPrint('=== RESPONSE ===');
-          debugPrint('Status: ${response.statusCode} ${response.reasonPhrase}');
-          debugPrint('Headers:');
-          response.headers.forEach((k, v) => debugPrint('  $k: $v'));
-          debugPrint('=== RAW BODY (${body.length} chars) ===');
-          debugPrint(body);
-
-          // Decode (JSON or base64) for both logging and parsing
+          // Decode (JSON or base64)
+          dynamic parsed;
           String decoded;
           try {
-            final data = json.decode(body);
-            decoded = data is List ? data.join('\n') : data.toString();
-            final pretty = const JsonEncoder.withIndent('  ').convert(data);
-            debugPrint('=== JSON (${pretty.length} chars) ===');
-            debugPrint(pretty.length > 8000 ? '${pretty.substring(0, 8000)}...' : pretty);
+            parsed = json.decode(body);
+            decoded = parsed is List ? parsed.join('\n') : body;
           } catch (_) {
             try {
               decoded = utf8.decode(base64.decode(body));
-              debugPrint('=== BASE64 (${decoded.length} chars) ===');
-              debugPrint(decoded);
             } catch (_) {
               decoded = body;
             }
@@ -706,7 +699,10 @@ class VpnProvider extends ChangeNotifier {
   }
 
   VpnProvider() {
-    _loadServers().then((_) => _autoConnect());
+    _loadServers().then((_) {
+      _autoConnect();
+      _autoRefreshSubscriptions();
+    });
     _generateHwid();
     _initV2ray();
   }
@@ -717,6 +713,15 @@ class VpnProvider extends ChangeNotifier {
       if (_status == VpnStatus.disconnected && _selectedServer != null) {
         toggleConnection();
       }
+    }
+  }
+
+  Future<void> _autoRefreshSubscriptions() async {
+    if (!_settings.autoRefresh) return;
+    final groups = _groupSources.keys.toList();
+    if (groups.isEmpty) return;
+    for (final group in groups) {
+      await syncGroup(group);
     }
   }
 
@@ -875,16 +880,12 @@ class VpnProvider extends ChangeNotifier {
     if (_selectedServer == null) return;
 
     if (!_v2rayInitialized) {
-      debugPrint('V2Ray not initialized yet. Waiting...');
       return;
     }
 
     if (_status == VpnStatus.disconnected) {
-      // Check for VPN permission on Android
       if (Platform.isAndroid) {
-        debugPrint('Requesting VPN permission...');
         final hasPermission = await flutterV2ray.requestPermission();
-        debugPrint('VPN permission result: $hasPermission');
         if (!hasPermission) return;
       }
 
@@ -1111,8 +1112,6 @@ class VpnProvider extends ChangeNotifier {
           .where((r) => r.ping > 0)
           .reduce((a, b) => a.ping < b.ping ? a : b);
       if (best.ping > 0 && best.server.config != _selectedServer?.config) {
-        debugPrint(
-            'Observatory: switching to ${best.server.name} (${best.ping}ms)');
         _selectedServer = best.server;
         _saveServers();
         notifyListeners();
@@ -1292,7 +1291,6 @@ class VpnProvider extends ChangeNotifier {
       notifyListeners();
       return (ok: ok, count: _servers.where((s) => s.group == groupName).length);
     }
-    debugPrint('syncGroup: no URL found for group "$groupName"');
     return (ok: false, count: 0);
   }
 

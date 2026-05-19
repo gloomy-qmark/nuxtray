@@ -14,8 +14,6 @@ class ServerListScreen extends StatefulWidget {
 }
 
 class _ServerListScreenState extends State<ServerListScreen> {
-  final Map<String, bool> _expandedGroups = {};
-
   void _confirmDeleteGroup(BuildContext context, VpnProvider vpn, String groupName) {
     showDialog(
       context: context,
@@ -107,18 +105,10 @@ class _ServerListScreenState extends State<ServerListScreen> {
                     (context, index) {
                       final groupName = groupedServers.keys.elementAt(index);
                       final groupServers = groupedServers[groupName]!;
-                      final isExpanded = _expandedGroups[groupName] ?? true;
-
                       return _AnimatedServerGroup(
                         index: index,
                         name: groupName,
                         servers: groupServers,
-                        isExpanded: isExpanded,
-                        onToggle: () {
-                          setState(() {
-                            _expandedGroups[groupName] = !isExpanded;
-                          });
-                        },
                         onDelete: () => _confirmDeleteGroup(context, vpn, groupName),
                         selectedServer: vpn.selectedServer,
                         onServerTap: (server) {
@@ -139,12 +129,10 @@ class _ServerListScreenState extends State<ServerListScreen> {
   }
 }
 
-class _AnimatedServerGroup extends StatefulWidget {
+class _AnimatedServerGroup extends StatelessWidget {
   final int index;
   final String name;
   final List<ServerInfo> servers;
-  final bool isExpanded;
-  final VoidCallback onToggle;
   final VoidCallback onDelete;
   final ServerInfo? selectedServer;
   final Function(ServerInfo) onServerTap;
@@ -153,56 +141,10 @@ class _AnimatedServerGroup extends StatefulWidget {
     required this.index,
     required this.name,
     required this.servers,
-    required this.isExpanded,
-    required this.onToggle,
     required this.onDelete,
     required this.selectedServer,
     required this.onServerTap,
   });
-
-  @override
-  State<_AnimatedServerGroup> createState() => _AnimatedServerGroupState();
-}
-
-class _AnimatedServerGroupState extends State<_AnimatedServerGroup>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _expandController;
-  late Animation<double> _expandAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _expandController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 350),
-    );
-    _expandAnimation = CurvedAnimation(
-      parent: _expandController,
-      curve: Curves.easeOutCubic,
-      reverseCurve: Curves.easeInCubic,
-    );
-    if (widget.isExpanded) {
-      _expandController.value = 1.0;
-    }
-  }
-
-  @override
-  void didUpdateWidget(_AnimatedServerGroup oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.isExpanded != oldWidget.isExpanded) {
-      if (widget.isExpanded) {
-        _expandController.forward();
-      } else {
-        _expandController.reverse();
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _expandController.dispose();
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -210,13 +152,13 @@ class _AnimatedServerGroupState extends State<_AnimatedServerGroup>
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    final hasUrl = vpn.groupSources.containsKey(widget.name);
-    final meta = vpn.metaForGroup(widget.name);
-    final displayName = meta?.profileTitle ?? widget.name;
+    final hasUrl = vpn.groupSources.containsKey(name);
+    final meta = vpn.metaForGroup(name);
+    final displayName = meta?.profileTitle ?? name;
 
     return TweenAnimationBuilder<double>(
       tween: Tween(begin: 0.0, end: 1.0),
-      duration: Duration(milliseconds: 300 + (widget.index * 80).toInt()),
+      duration: Duration(milliseconds: 300 + (index * 80).toInt()),
       curve: Curves.easeOutCubic,
       builder: (context, value, child) {
         return Opacity(
@@ -240,136 +182,119 @@ class _AnimatedServerGroupState extends State<_AnimatedServerGroup>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              InkWell(
-                onTap: widget.onToggle,
-                borderRadius: BorderRadius.circular(20),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-                  child: Row(
-                    children: [
-                      const SizedBox(width: 40),
-                      Expanded(
-                        child: Text(
-                          displayName,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.bold,
-                            color: cs.onSurface,
-                            fontSize: 18,
-                          ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                child: Row(
+                  children: [
+                    const SizedBox(width: 40),
+                    Expanded(
+                      child: Text(
+                        displayName,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: cs.onSurface,
+                          fontSize: 18,
                         ),
                       ),
-                      if (widget.isExpanded)
-                        PopupMenuButton<_GroupAction>(
-                          icon: Icon(
-                            Icons.more_horiz_rounded,
-                            color: cs.onSurfaceVariant,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          color: cs.surfaceContainerHigh,
-                          elevation: 2,
-                          onSelected: (action) async {
-                            switch (action) {
-                              case _GroupAction.sync:
-                                HapticFeedback.mediumImpact();
-                                final result = await vpn.syncGroup(widget.name);
-                                if (context.mounted) {
-                                  if (result.ok) {
-                                    InAppPush.show(context,
-                                      message: '${widget.name}: ${result.count} серверов обновлено',
-                                      type: PushType.success,
-                                    );
-                                  } else {
-                                    InAppPush.show(context,
-                                      message: 'Ошибка синхронизации ${widget.name}',
-                                      type: PushType.error,
-                                    );
-                                  }
-                                }
-                              case _GroupAction.ping:
-                                HapticFeedback.mediumImpact();
-                                vpn.checkGroupPing(widget.name);
-                              case _GroupAction.delete:
-                                widget.onDelete();
+                    ),
+                    PopupMenuButton<_GroupAction>(
+                      icon: Icon(
+                        Icons.more_horiz_rounded,
+                        color: cs.onSurfaceVariant,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      color: cs.surfaceContainerHigh,
+                      elevation: 2,
+                      onSelected: (action) async {
+                        switch (action) {
+                          case _GroupAction.sync:
+                            HapticFeedback.mediumImpact();
+                            final result = await vpn.syncGroup(name);
+                            if (context.mounted) {
+                              if (result.ok) {
+                                InAppPush.show(context,
+                                  message: '$name: ${result.count} серверов обновлено',
+                                  type: PushType.success,
+                                );
+                              } else {
+                                InAppPush.show(context,
+                                  message: 'Ошибка синхронизации $name',
+                                  type: PushType.error,
+                                );
+                              }
                             }
-                          },
-                          itemBuilder: (context) => [
-                            if (hasUrl)
-                              PopupMenuItem(
-                                value: _GroupAction.sync,
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.sync, size: 20, color: cs.onSurfaceVariant),
-                                    const SizedBox(width: 12),
-                                    const Text('Синхронизировать'),
-                                  ],
-                                ),
-                              ),
-                            PopupMenuItem(
-                              value: _GroupAction.ping,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.speed, size: 20, color: cs.onSurfaceVariant),
-                                  const SizedBox(width: 12),
-                                  const Text('Проверить пинг'),
-                                ],
-                              ),
+                          case _GroupAction.ping:
+                            HapticFeedback.mediumImpact();
+                            vpn.checkGroupPing(name);
+                          case _GroupAction.delete:
+                            onDelete();
+                        }
+                      },
+                      itemBuilder: (context) => [
+                        if (hasUrl)
+                          PopupMenuItem(
+                            value: _GroupAction.sync,
+                            child: Row(
+                              children: [
+                                Icon(Icons.sync, size: 20, color: cs.onSurfaceVariant),
+                                const SizedBox(width: 12),
+                                const Text('Синхронизировать'),
+                              ],
                             ),
-                            const PopupMenuDivider(),
-                            PopupMenuItem(
-                              value: _GroupAction.delete,
-                              child: Row(
-                                children: [
-                                  Icon(Icons.delete_outline, size: 20, color: cs.error),
-                                  const SizedBox(width: 12),
-                                  Text('Удалить', style: TextStyle(color: cs.error)),
-                                ],
-                              ),
-                            ),
-                          ],
-                        )
-                      else
-                        const SizedBox(width: 40),
-                    ],
-                  ),
-                ),
-              ),
-              SizeTransition(
-                axisAlignment: -1.0,
-                sizeFactor: _expandAnimation,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // --- ИНФОРМАЦИОННАЯ ПЛАШКА ---
-                    _SubscriptionInfoPanel(
-                      meta: vpn.metaForGroup(widget.name),
-                      theme: theme,
-                      cs: cs,
+                          ),
+                        PopupMenuItem(
+                          value: _GroupAction.ping,
+                          child: Row(
+                            children: [
+                              Icon(Icons.speed, size: 20, color: cs.onSurfaceVariant),
+                              const SizedBox(width: 12),
+                              const Text('Проверить пинг'),
+                            ],
+                          ),
+                        ),
+                        const PopupMenuDivider(),
+                        PopupMenuItem(
+                          value: _GroupAction.delete,
+                          child: Row(
+                            children: [
+                              Icon(Icons.delete_outline, size: 20, color: cs.error),
+                              const SizedBox(width: 12),
+                              Text('Удалить', style: TextStyle(color: cs.error)),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    // Разделитель между инфо-плашкой и списком серверов
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Divider(color: cs.outlineVariant.withValues(alpha: 0.2), height: 1),
-                    ),
-                    // --- КОНЕЦ ИНФОРМАЦИОННОЙ ПЛАШКИ ---
-
-                    // Список серверов
-                    ...List.generate(widget.servers.length, (i) {
-                      final server = widget.servers[i];
-                      final isSelected = widget.selectedServer == server;
-                      return _StaggeredServerCard(
-                        index: i,
-                        server: server,
-                        isSelected: isSelected,
-                        onTap: () => widget.onServerTap(server),
-                        expandAnimation: _expandAnimation,
-                      );
-                    }),
                   ],
                 ),
               ),
+              // --- ИНФОРМАЦИОННАЯ ПЛАШКА ---
+              _SubscriptionInfoPanel(
+                meta: vpn.metaForGroup(name),
+                theme: theme,
+                cs: cs,
+              ),
+              // Разделитель между инфо-плашкой и списком серверов
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Divider(color: cs.outlineVariant.withValues(alpha: 0.2), height: 1),
+              ),
+              // --- КОНЕЦ ИНФОРМАЦИОННОЙ ПЛАШКИ ---
+
+              // Список серверов
+              ...List.generate(servers.length, (i) {
+                final server = servers[i];
+                final isSelected = selectedServer == server;
+                return _StaggeredServerCard(
+                  index: i,
+                  server: server,
+                  isSelected: isSelected,
+                  onTap: () => onServerTap(server),
+                );
+              }),
             ],
           ),
         ),
@@ -383,14 +308,12 @@ class _StaggeredServerCard extends StatelessWidget {
   final ServerInfo server;
   final bool isSelected;
   final VoidCallback onTap;
-  final Animation<double> expandAnimation;
 
   const _StaggeredServerCard({
     required this.index,
     required this.server,
     required this.isSelected,
     required this.onTap,
-    required this.expandAnimation,
   });
 
   @override
@@ -398,29 +321,9 @@ class _StaggeredServerCard extends StatelessWidget {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    final staggerDelay = 0.025 * index;
-    final staggerStart = (staggerDelay / 0.35).clamp(0.0, 0.85);
-    final staggerEnd = ((staggerDelay + 0.10) / 0.35).clamp(0.1, 0.95);
-
-    return AnimatedBuilder(
-      animation: expandAnimation,
-      builder: (context, child) {
-        final progress = expandAnimation.value;
-        final itemProgress = (progress - staggerStart) / (staggerEnd - staggerStart);
-        final clamped = itemProgress.clamp(0.0, 1.0);
-        final anim = Curves.easeOutCubic.transform(clamped);
-
-        return Opacity(
-          opacity: anim,
-          child: Transform.translate(
-            offset: Offset(0, 14 * (1 - anim)),
-            child: child,
-          ),
-        );
-      },
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
-        child: Card(
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
+      child: Card(
           elevation: 0,
           margin: EdgeInsets.zero,
           clipBehavior: Clip.antiAlias,
@@ -506,7 +409,6 @@ class _StaggeredServerCard extends StatelessWidget {
             ),
           ),
         ),
-      ),
     );
   }
 

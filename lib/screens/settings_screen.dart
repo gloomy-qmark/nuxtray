@@ -15,9 +15,7 @@ class SettingsScreen extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Настройки'),
-      ),
+      appBar: AppBar(),
       body: ListView(
         children: [
           const SizedBox(height: 8),
@@ -113,6 +111,15 @@ class SettingsScreen extends StatelessWidget {
             trailing: Switch(
               value: s.autoStart,
               onChanged: (val) => vpn.updateSettings(s.copyWith(autoStart: val)),
+            ),
+          ),
+          _SettingTile(
+            icon: Icons.refresh,
+            title: 'Автообновление подписок',
+            subtitle: 'Обновлять подписки при запуске приложения',
+            trailing: Switch(
+              value: s.autoRefresh,
+              onChanged: (val) => vpn.updateSettings(s.copyWith(autoRefresh: val)),
             ),
           ),
           const _DividerWithPadding(),
