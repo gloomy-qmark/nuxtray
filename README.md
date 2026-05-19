@@ -19,7 +19,6 @@
 
 <p align="center">
   <b>V2Ray / Xray VPN клиент на Flutter</b><br>
-  <sub>Material 3 · Monet you · Pill navigation · Kill switch</sub>
 </p>
 
 ---
