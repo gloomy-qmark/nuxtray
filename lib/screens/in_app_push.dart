@@ -6,18 +6,23 @@ enum PushType { success, error, info }
 class InAppPush {
   static OverlayEntry? _current;
 
+  static void _cleanup() {
+    _current?.remove();
+    _current = null;
+  }
+
   static void show(BuildContext context, {
     required String message,
     PushType type = PushType.info,
     Duration duration = const Duration(seconds: 3),
   }) {
-    _current?.remove();
+    _cleanup();
     final entry = OverlayEntry(
       builder: (context) => _PushWidget(
         message: message,
         type: type,
         duration: duration,
-        onDismiss: () => _current?.remove(),
+        onDismiss: _cleanup,
       ),
     );
     _current = entry;
